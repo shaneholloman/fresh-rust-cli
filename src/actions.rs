@@ -1356,6 +1356,8 @@ pub fn action_to_events(
         | Action::CommandPalette
         | Action::ShowHelp
         | Action::ToggleLineWrap
+        | Action::ToggleComposeMode
+        | Action::SetComposeWidth
         | Action::IncreaseSplitSize
         | Action::DecreaseSplitSize
         | Action::Undo

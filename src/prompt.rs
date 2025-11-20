@@ -47,6 +47,8 @@ pub enum PromptType {
     SetBookmark,
     /// Jump to a bookmark - prompts for register (0-9)
     JumpToBookmark,
+    /// Set compose width (empty clears to viewport)
+    SetComposeWidth,
 }
 
 /// Prompt state for the minibuffer

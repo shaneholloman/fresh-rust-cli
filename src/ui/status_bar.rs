@@ -116,10 +116,12 @@ impl StatusBarRenderer {
         // Use the pre-computed display name from buffer metadata
         let filename = display_name;
 
-        let modified = if state.buffer.is_modified() {
-            " [+]"
-        } else {
-            ""
+        let modified = if state.buffer.is_modified() { " [+]" } else { "" };
+
+        // View mode indicator
+        let mode_label = match state.view_mode {
+            crate::state::ViewMode::Compose => " | Compose",
+            _ => "",
         };
 
         let cursor = *state.primary_cursor();

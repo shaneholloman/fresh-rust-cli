@@ -227,6 +227,8 @@ pub enum Action {
     ShowKeyboardShortcuts,
     CommandPalette,
     ToggleLineWrap,
+    ToggleComposeMode,
+    SetComposeWidth,
 
     // Buffer navigation
     NextBuffer,
@@ -491,6 +493,8 @@ impl Action {
             "keyboard_shortcuts" => Some(Action::ShowKeyboardShortcuts),
             "command_palette" => Some(Action::CommandPalette),
             "toggle_line_wrap" => Some(Action::ToggleLineWrap),
+            "toggle_compose_mode" => Some(Action::ToggleComposeMode),
+            "set_compose_width" => Some(Action::SetComposeWidth),
 
             "next_buffer" => Some(Action::NextBuffer),
             "prev_buffer" => Some(Action::PrevBuffer),
@@ -1603,6 +1607,8 @@ impl KeybindingResolver {
             Action::ShowKeyboardShortcuts => "Show keyboard shortcuts".to_string(),
             Action::CommandPalette => "Command palette".to_string(),
             Action::ToggleLineWrap => "Toggle line wrap".to_string(),
+            Action::ToggleComposeMode => "Toggle compose mode".to_string(),
+            Action::SetComposeWidth => "Set compose width".to_string(),
             Action::NextBuffer => "Next buffer".to_string(),
             Action::PrevBuffer => "Previous buffer".to_string(),
             Action::NavigateBack => "Navigate back in history".to_string(),

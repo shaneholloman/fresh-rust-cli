@@ -404,12 +404,15 @@ impl SplitRenderer {
         ansi_background: Option<&AnsiBackground>,
         background_fade: f32,
         lsp_waiting: bool,
-        line_wrap: bool,
+        _line_wrap: bool,
         estimated_line_length: usize,
         _buffer_id: BufferId,
         hide_cursor: bool,
     ) {
         let _span = tracing::trace_span!("render_buffer_in_split").entered();
+
+        // Use per-buffer wrap setting (Compose mode forces wrap on)
+        let line_wrap = state.viewport.line_wrap_enabled;
 
         // Debug: Log overlay count for diagnostics
         let overlay_count = state.overlays.all().len();
@@ -425,6 +428,45 @@ impl SplitRenderer {
 
         // Calculate gutter width from margin manager
         let gutter_width = state.margins.left_total_width();
+
+        // Centering for compose mode with optional tinted margins
+        let mut render_area = area;
+        if state.view_mode == crate::state::ViewMode::Compose {
+            let target_width = state
+                .compose_width
+                .map(|w| w as u16)
+                .unwrap_or(render_area.width);
+            let clamped_width = target_width.min(render_area.width).max(1);
+            if clamped_width < render_area.width {
+                let pad_total = render_area.width - clamped_width;
+                let left_pad = pad_total / 2;
+                let right_pad = pad_total - left_pad;
+
+                // Tint margins to indicate centered column
+                let margin_style = Style::default().bg(theme.line_number_bg);
+                if left_pad > 0 {
+                    let left_rect =
+                        Rect::new(render_area.x, render_area.y, left_pad, render_area.height);
+                    frame.render_widget(Block::default().style(margin_style), left_rect);
+                }
+                if right_pad > 0 {
+                    let right_rect = Rect::new(
+                        render_area.x + left_pad + clamped_width,
+                        render_area.y,
+                        right_pad,
+                        render_area.height,
+                    );
+                    frame.render_widget(Block::default().style(margin_style), right_rect);
+                }
+
+                render_area = Rect::new(
+                    render_area.x + left_pad,
+                    render_area.y,
+                    clamped_width,
+                    render_area.height,
+                );
+            }
+        }
 
         let mut lines = Vec::new();
 
@@ -661,12 +703,12 @@ impl SplitRenderer {
             let max_visible_chars = if line_wrap {
                 // With wrapping: might need chars for multiple wrapped lines
                 // Be generous to avoid cutting off wrapped content
-                (area.width as usize)
+                (render_area.width as usize)
                     .saturating_mul(visible_lines_remaining.max(1))
                     .saturating_add(200)
             } else {
                 // Without wrapping: only need one line worth of characters
-                (area.width as usize).saturating_add(100)
+                (render_area.width as usize).saturating_add(100)
             };
             let max_chars_to_process = left_col.saturating_add(max_visible_chars);
 
@@ -1013,7 +1055,7 @@ impl SplitRenderer {
             // For no-wrap mode, we use infinite width so everything stays in one segment
             if !line_spans.is_empty() {
                 let config = if line_wrap {
-                    WrapConfig::new(area.width as usize, gutter_width, true)
+                    WrapConfig::new(render_area.width as usize, gutter_width, true)
                 } else {
                     WrapConfig::no_wrap(gutter_width)
                 };
@@ -1218,14 +1260,14 @@ impl SplitRenderer {
             };
         }
 
-        while lines.len() < area.height as usize {
+        while lines.len() < render_area.height as usize {
             lines.push(Line::raw(""));
         }
 
         if let Some(bg) = ansi_background {
             Self::apply_background_to_lines(
                 &mut lines,
-                area.width,
+                render_area.width,
                 bg,
                 theme.editor_bg,
                 theme.editor_fg,
@@ -1236,11 +1278,11 @@ impl SplitRenderer {
         }
 
         // Clear the area first to prevent rendering artifacts when switching buffers
-        frame.render_widget(Clear, area);
+        frame.render_widget(Clear, render_area);
 
         let paragraph = Paragraph::new(lines).block(Block::default().borders(Borders::NONE));
 
-        frame.render_widget(paragraph, area);
+        frame.render_widget(paragraph, render_area);
 
         // Render cursor and log state (only for active split)
         // Only show hardware cursor if show_cursors is true for this buffer and not hidden
@@ -1258,12 +1300,15 @@ impl SplitRenderer {
             // and adjust Y for the content area offset (area.y accounts for tab bar)
             // NOTE: cursor_screen_x is already the column within the CONTENT (after gutter),
             // so we need to add gutter_width to account for the gutter that's rendered in the line
-            let screen_x = area.x.saturating_add(x).saturating_add(gutter_width as u16);
-            let screen_y = area.y.saturating_add(y);
+            let screen_x = render_area
+                .x
+                .saturating_add(x)
+                .saturating_add(gutter_width as u16);
+            let screen_y = render_area.y.saturating_add(y);
             tracing::trace!(
                 "Hardware cursor: area.x={}, area.y={}, gutter_width={}, cursor(x={},y={}) => screen({},{})",
-                area.x,
-                area.y,
+                render_area.x,
+                render_area.y,
                 gutter_width,
                 x,
                 y,

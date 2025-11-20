@@ -21,6 +21,15 @@ use anyhow::Result;
 use ratatui::style::{Color, Style};
 use std::cell::RefCell;
 
+/// Display mode for a buffer
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ViewMode {
+    /// Plain source rendering
+    Source,
+    /// Semi-WYSIWYG compose rendering
+    Compose,
+}
+
 /// The complete editor state - everything needed to represent the current editing session
 pub struct EditorState {
     /// The text buffer
@@ -75,6 +84,15 @@ pub struct EditorState {
 
     /// Semantic highlighter for word occurrence highlighting
     pub semantic_highlighter: SemanticHighlighter,
+
+    /// View mode for this buffer (Source or Compose)
+    pub view_mode: ViewMode,
+
+    /// Optional compose width for centered rendering
+    pub compose_width: Option<u16>,
+
+    /// Previously configured line number visibility (to restore after Compose)
+    pub compose_prev_line_numbers: Option<bool>,
 }
 
 impl EditorState {
@@ -105,6 +123,9 @@ impl EditorState {
             show_cursors: true,
             editing_disabled: false,
             semantic_highlighter: SemanticHighlighter::new(),
+            view_mode: ViewMode::Source,
+            compose_width: None,
+            compose_prev_line_numbers: None,
         }
     }
 
@@ -163,6 +184,9 @@ impl EditorState {
             show_cursors: true,
             editing_disabled: false,
             semantic_highlighter,
+            view_mode: ViewMode::Source,
+            compose_width: None,
+            compose_prev_line_numbers: None,
         })
     }
 

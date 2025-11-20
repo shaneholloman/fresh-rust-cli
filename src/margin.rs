@@ -434,6 +434,9 @@ impl MarginManager {
             self.left_config.enabled = false;
         } else {
             self.left_config.enabled = true;
+            if self.left_config.width == 0 {
+                self.left_config.width = 4;
+            }
         }
     }
 

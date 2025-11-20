@@ -458,8 +458,8 @@ impl SplitRenderer {
         // Flatten view transform if present
         // Build view representation (identity when no transform)
         let visible_count = state.viewport.visible_line_count();
-        let mut view_text;
-        let mut view_mapping;
+        let view_text;
+        let view_mapping;
         if let Some(vt) = view_transform.clone() {
             let (text, mapping) = flatten_tokens(&vt.tokens);
             view_text = text;
@@ -496,12 +496,8 @@ impl SplitRenderer {
         let mut view_lines: Vec<(usize, String, bool)> = Vec::new();
         let mut offset = 0usize;
         for segment in view_text.split_inclusive('\n') {
-            let mut text = segment.to_string();
-            let mut ends_with_newline = false;
-            if text.ends_with('\n') {
-                text.pop();
-                ends_with_newline = true;
-            }
+            let text = segment.to_string(); // keep newline so indices stay aligned
+            let ends_with_newline = text.ends_with('\n');
             view_lines.push((offset, text, ends_with_newline));
             offset += segment.chars().count();
         }
@@ -526,12 +522,12 @@ impl SplitRenderer {
         let mut view_start_line_skip = 0usize;
         for (idx, (line_offset, text, _)) in view_lines.iter().enumerate() {
             let len = text.chars().count();
-            if view_top >= *line_offset && view_top <= *line_offset + len {
-                view_start_line_idx = idx;
-                view_start_line_skip = view_top.saturating_sub(*line_offset);
-                break;
+                if view_top >= *line_offset && view_top <= *line_offset + len {
+                    view_start_line_idx = idx;
+                    view_start_line_skip = view_top.saturating_sub(*line_offset);
+                    break;
+                }
             }
-        }
 
         // Update margin width based on buffer size
         // Estimate total lines from buffer length (same as viewport.gutter_width)
@@ -1145,7 +1141,11 @@ impl SplitRenderer {
             // Note: We already handle cursors on newlines in the loop above.
             // For lines without newlines (last line or empty lines), check if cursor is at end
             if !line_has_newline {
-                let line_end_pos = line_view_offset + line_content.chars().count();
+                let line_end_pos = line_view_offset
+                    + line_content
+                        .chars()
+                        .count()
+                        .saturating_sub(1);
                 let cursor_at_end = cursor_positions.iter().any(|&pos| pos == line_end_pos);
 
                 tracing::trace!(
@@ -1231,12 +1231,10 @@ impl SplitRenderer {
                 // - If line ends with newline, cursor AT the newline belongs to next line (use <)
                 // - If line has no newline, cursor can be at end of line (use <=)
                 let line_len_chars = line_content.chars().count();
-                let line_end_exclusive = if line_has_newline && line_len_chars > 0 {
+                let line_end_exclusive = if line_len_chars > 0 {
                     line_view_offset + line_len_chars.saturating_sub(1)
-                } else if line_has_newline {
-                    line_view_offset
                 } else {
-                    line_view_offset + line_len_chars
+                    line_view_offset
                 };
 
                 let line_start_pos = line_view_offset;
@@ -1245,7 +1243,11 @@ impl SplitRenderer {
                     && primary_cursor_position >= line_start_pos
                     && primary_cursor_position <= line_end_exclusive
                 {
-                    let column = primary_cursor_position.saturating_sub(line_view_offset);
+                    let display_len = line_text.chars().count();
+                    let mut column = primary_cursor_position.saturating_sub(line_view_offset);
+                    if column > display_len {
+                        column = display_len;
+                    }
 
                     // For no-wrap mode with horizontal scrolling:
                     // segments were created from line_text (already scrolled), so we need to

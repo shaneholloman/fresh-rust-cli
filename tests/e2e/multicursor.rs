@@ -867,6 +867,147 @@ fn test_cursor_visible_on_initial_empty_buffer() {
         "Found cursor at screen position ({x}, {y}): '{char_at_cursor}' (primary: {is_primary})"
     );
     assert!(*is_primary, "The only cursor should be the primary cursor");
+
+    // CRITICAL: The cursor must NOT be in the gutter area (column 0-7 typically)
+    // It should be at the content area, which starts after the gutter
+    let gutter_width = harness.editor().active_state().margins.left_total_width();
+    println!("Gutter width: {}", gutter_width);
+    println!("Cursor screen position: ({}, {})", x, y);
+    println!("Margins enabled: {}", harness.editor().active_state().margins.left_config.enabled);
+    assert!(
+        *x >= gutter_width as u16,
+        "Cursor x position ({}) must be >= gutter width ({}) - cursor should not be in gutter area",
+        x,
+        gutter_width
+    );
+}
+
+/// Test cursor position after Ctrl+End in various buffer states
+/// This verifies the cursor renders at the correct screen position, not in the gutter
+#[test]
+fn test_ctrl_end_cursor_position() {
+    use crossterm::event::{KeyCode, KeyModifiers};
+
+    // Test 1: Empty buffer - Ctrl+End should keep cursor at (gutter_width, content_start_y)
+    {
+        let mut harness = EditorTestHarness::new(80, 24).unwrap();
+        harness.render().unwrap();
+
+        let gutter_width = harness.editor().active_state().margins.left_total_width();
+        println!("Test 1: Empty buffer");
+        println!("  Gutter width: {}", gutter_width);
+
+        // Press Ctrl+End to jump to end of buffer
+        harness.send_key(KeyCode::End, KeyModifiers::CONTROL).unwrap();
+        harness.render().unwrap();
+
+        let (cursor_x, _cursor_y) = harness.screen_cursor_position();
+        println!("  Cursor x after Ctrl+End: {}", cursor_x);
+        assert!(
+            cursor_x >= gutter_width as u16,
+            "Empty buffer: Cursor x ({}) should be >= gutter width ({})",
+            cursor_x,
+            gutter_width
+        );
+    }
+
+    // Test 2: Buffer with trailing newline - Ctrl+End should put cursor on empty line after newline
+    // The implicit line after the newline should have a line number in the gutter
+    {
+        let mut harness = EditorTestHarness::new(80, 24).unwrap();
+        harness.type_text("hello\n").unwrap();
+        harness.render().unwrap();
+
+        let gutter_width = harness.editor().active_state().margins.left_total_width();
+        println!("Test 2: Buffer with trailing newline 'hello\\n'");
+        println!("  Gutter width: {}", gutter_width);
+
+        // Press Ctrl+End to jump to end of buffer
+        harness.send_key(KeyCode::End, KeyModifiers::CONTROL).unwrap();
+        harness.render().unwrap();
+
+        let (cursor_x, cursor_y) = harness.screen_cursor_position();
+        println!("  Cursor position after Ctrl+End: ({}, {})", cursor_x, cursor_y);
+        assert!(
+            cursor_x >= gutter_width as u16,
+            "Trailing newline: Cursor x ({}) should be >= gutter width ({})",
+            cursor_x,
+            gutter_width
+        );
+
+        // Check that the gutter shows a line number for the implicit line after the newline
+        // The cursor should be on line 2 (0-indexed y position relative to content area)
+        // Get the row text where cursor is positioned and check the gutter
+        let row_text = harness.get_row_text(cursor_y);
+        println!("  Row text at cursor y={}: '{}'", cursor_y, row_text);
+
+        // The gutter should contain "2" for line 2 (the implicit line after "hello\n")
+        // Gutter format is typically: " N │" where N is right-aligned line number
+        let gutter_text: String = row_text.chars().take(gutter_width).collect();
+        println!("  Gutter text: '{}'", gutter_text);
+        assert!(
+            gutter_text.contains("2"),
+            "Trailing newline: Gutter should show line number 2 for the implicit line, got: '{}'",
+            gutter_text
+        );
+    }
+
+    // Test 3: Buffer ending with empty line (two newlines) - Ctrl+End on last empty line
+    {
+        let mut harness = EditorTestHarness::new(80, 24).unwrap();
+        harness.type_text("hello\n\n").unwrap();
+        harness.render().unwrap();
+
+        let gutter_width = harness.editor().active_state().margins.left_total_width();
+        println!("Test 3: Buffer with empty line 'hello\\n\\n'");
+        println!("  Gutter width: {}", gutter_width);
+
+        // Press Ctrl+End to jump to end of buffer
+        harness.send_key(KeyCode::End, KeyModifiers::CONTROL).unwrap();
+        harness.render().unwrap();
+
+        let (cursor_x, _cursor_y) = harness.screen_cursor_position();
+        println!("  Cursor x after Ctrl+End: {}", cursor_x);
+        assert!(
+            cursor_x >= gutter_width as u16,
+            "Empty line: Cursor x ({}) should be >= gutter width ({})",
+            cursor_x,
+            gutter_width
+        );
+    }
+
+    // Test 4: Buffer without trailing newline - Ctrl+End should put cursor after last char
+    {
+        let mut harness = EditorTestHarness::new(80, 24).unwrap();
+        harness.type_text("hello").unwrap();
+        harness.render().unwrap();
+
+        let gutter_width = harness.editor().active_state().margins.left_total_width();
+        println!("Test 4: Buffer without trailing newline 'hello'");
+        println!("  Gutter width: {}", gutter_width);
+
+        // Press Ctrl+End to jump to end of buffer
+        harness.send_key(KeyCode::End, KeyModifiers::CONTROL).unwrap();
+        harness.render().unwrap();
+
+        let (cursor_x, _cursor_y) = harness.screen_cursor_position();
+        println!("  Cursor x after Ctrl+End: {}", cursor_x);
+        // Cursor should be at gutter_width + 5 (after "hello")
+        let expected_x = gutter_width as u16 + 5;
+        assert!(
+            cursor_x >= gutter_width as u16,
+            "No trailing newline: Cursor x ({}) should be >= gutter width ({})",
+            cursor_x,
+            gutter_width
+        );
+        assert_eq!(
+            cursor_x,
+            expected_x,
+            "No trailing newline: Cursor x ({}) should be at end of 'hello' ({})",
+            cursor_x,
+            expected_x
+        );
+    }
 }
 
 /// Test cursor visibility when opening a file

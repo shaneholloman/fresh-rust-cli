@@ -771,7 +771,7 @@ impl SplitRenderer {
         let mut view_lines: Vec<ViewLine> = Vec::new();
         let mut offset = 0usize;
         for segment in view_text.split_inclusive('\n') {
-            let text = segment.to_string(); // keep newline so indices stay aligned
+            let text = segment.to_string(); // keep newline so indices stays aligned
             let ends_with_newline = text.ends_with('\n');
             view_lines.push(ViewLine {
                 offset,
@@ -1476,7 +1476,9 @@ impl SplitRenderer {
 
             // Set last_seg_y early so cursor detection works for both empty and non-empty lines
             // For lines without wrapping, this will be the final y position
-            if line_spans.is_empty() || !line_wrap {
+            // Also set for empty content lines (regardless of line_wrap) so cursor at EOF can be positioned
+            let content_is_empty = line_content.is_empty();
+            if line_spans.is_empty() || !line_wrap || content_is_empty {
                 last_seg_y = Some(lines.len() as u16);
             }
 
@@ -1491,19 +1493,20 @@ impl SplitRenderer {
                 let after_last_char_buf_pos = view_mapping.get(after_last_char_view_idx).copied().flatten();
 
                 let cursor_at_end = cursor_positions.iter().any(|&pos| {
-                    let matches_last = last_char_buf_pos.map_or(false, |bp| pos == bp);
+                    // Cursor is "at end" only if it's AFTER the last character, not ON it.
+                    // A cursor ON the last character should render on that character (handled in main loop).
                     let matches_after = after_last_char_buf_pos.map_or(false, |bp| pos == bp);
-                    // Fallback: when there's no mapping after last char (EOF), check if cursor is at/near end
+                    // Fallback: when there's no mapping after last char (EOF), check if cursor is after last char
                     // The fallback should match the position that would be "after" if there was a mapping
                     let expected_after_pos = last_char_buf_pos.map(|p| p + 1).unwrap_or(0);
                     let matches_fallback = after_last_char_buf_pos.is_none() && pos == expected_after_pos;
 
-                    matches_last || matches_after || matches_fallback
+                    matches_after || matches_fallback
                 });
 
                 if cursor_at_end {
-                    let is_primary_at_end = last_char_buf_pos.map_or(false, |bp| bp == primary_cursor_position)
-                        || after_last_char_buf_pos.map_or(false, |bp| bp == primary_cursor_position)
+                    // Primary cursor is at end only if AFTER the last char, not ON it
+                    let is_primary_at_end = after_last_char_buf_pos.map_or(false, |bp| bp == primary_cursor_position)
                         || (after_last_char_buf_pos.is_none() && primary_cursor_position >= state.buffer.len());
 
                     // Track cursor position for primary cursor
@@ -1572,12 +1575,21 @@ impl SplitRenderer {
                 }
             }
 
+            // Track if line was empty before moving line_spans
+            let line_was_empty = line_spans.is_empty();
             lines.push(Line::from(line_spans));
 
             // Update last_line_end and check for cursor on newline BEFORE the break check
             // This ensures the last visible line's metadata is captured
             if let Some(y) = last_seg_y {
-                let end_x = last_visible_x.saturating_add(1);
+                // end_x is the cursor position after the last visible character.
+                // For empty lines, last_visible_x stays at 0, so we need to ensure end_x is
+                // at least gutter_width to place the cursor after the gutter, not in it.
+                let end_x = if line_was_empty {
+                    gutter_width as u16
+                } else {
+                    last_visible_x.saturating_add(1)
+                };
                 let view_end_idx = line_view_offset + line_content.chars().count();
 
                 last_line_end = Some(LastLineEnd {
@@ -1610,6 +1622,59 @@ impl SplitRenderer {
 
             if lines_rendered >= visible_line_count {
                 break;
+            }
+        }
+
+        // If the last line ended with a newline, render an implicit empty line after it.
+        // This shows the line number for the cursor position after the final newline.
+        if let Some(ref end) = last_line_end {
+            if end.terminated_with_newline && lines_rendered < visible_line_count {
+                // Render the implicit line after the newline
+                let mut implicit_line_spans = Vec::new();
+                let implicit_line_num = current_source_line_num + 1;
+
+                if state.margins.left_config.enabled {
+                    // Indicator column (space)
+                    implicit_line_spans.push(Span::styled(" ", Style::default()));
+
+                    // Line number
+                    let estimated_lines = (state.buffer.len() / 80).max(1);
+                    let margin_content = state.margins.render_line(
+                        implicit_line_num,
+                        crate::margin::MarginPosition::Left,
+                        estimated_lines,
+                    );
+                    let (rendered_text, style_opt) =
+                        margin_content.render(state.margins.left_config.width);
+                    let margin_style =
+                        style_opt.unwrap_or_else(|| Style::default().fg(theme.line_number_fg));
+                    implicit_line_spans.push(Span::styled(rendered_text, margin_style));
+
+                    // Separator
+                    if state.margins.left_config.show_separator {
+                        implicit_line_spans.push(Span::styled(
+                            state.margins.left_config.separator.to_string(),
+                            Style::default().fg(theme.line_number_fg),
+                        ));
+                    }
+                }
+
+                let implicit_y = lines.len() as u16;
+                lines.push(Line::from(implicit_line_spans));
+                lines_rendered += 1;
+
+                // Update last_line_end for the implicit line
+                last_line_end = Some(LastLineEnd {
+                    pos: (gutter_width as u16, implicit_y),
+                    terminated_with_newline: false,
+                });
+
+                // If primary cursor is at EOF (after the newline), set cursor on this line
+                if primary_cursor_position == state.buffer.len() && !have_cursor {
+                    cursor_screen_x = gutter_width as u16;
+                    cursor_screen_y = implicit_y;
+                    have_cursor = true;
+                }
             }
         }
 
@@ -1946,12 +2011,20 @@ mod tests {
         content: &str,
         cursor_pos: usize,
     ) -> (LineRenderOutput, usize, bool, usize) {
+        render_output_for_with_gutters(content, cursor_pos, false)
+    }
+
+    fn render_output_for_with_gutters(
+        content: &str,
+        cursor_pos: usize,
+        gutters_enabled: bool,
+    ) -> (LineRenderOutput, usize, bool, usize) {
         let mut state = EditorState::new(20, 6, 1024);
         state.buffer = Buffer::from_str(content, 1024);
         state.cursors.primary_mut().position = cursor_pos.min(state.buffer.len());
         state.viewport.resize(20, 4);
-        // Disable line numbers/gutters for simpler cursor position testing
-        state.margins.left_config.enabled = false;
+        // Enable/disable line numbers/gutters based on parameter
+        state.margins.left_config.enabled = gutters_enabled;
 
         let render_area = Rect::new(0, 0, 20, 4);
         let visible_count = state.viewport.visible_line_count();
@@ -2288,6 +2361,54 @@ mod tests {
         let (cursor_pos, new_content) = check_typing_at_cursor("", 0, 'X');
         assert_eq!(new_content, "X", "Typing in empty buffer should insert character");
         assert_eq!(cursor_pos, Some((0, 0)));
+    }
+
+    #[test]
+    fn e2e_cursor_empty_buffer_with_gutters() {
+        // Empty buffer with cursor at position 0, with gutters enabled
+        // The cursor should be positioned at the gutter width (right after the gutter),
+        // NOT at column 0 (which would be in the gutter area)
+        let (output, buffer_len, buffer_newline, cursor_pos) =
+            render_output_for_with_gutters("", 0, true);
+
+        // With gutters enabled, the gutter width should be > 0
+        // Default gutter includes: 1 char indicator + line number width + separator
+        // For a 1-line buffer, line number width is typically 1 digit + padding
+        let gutter_width = {
+            let mut state = EditorState::new(20, 6, 1024);
+            state.margins.left_config.enabled = true;
+            state.margins.update_width_for_buffer(1);
+            state.margins.left_total_width()
+        };
+        assert!(gutter_width > 0, "Gutter width should be > 0 when enabled");
+
+        // CRITICAL: Check the RENDERED cursor position directly from output.cursor
+        // This is what the terminal will actually use for cursor positioning
+        // The cursor should be rendered at gutter_width, not at 0
+        assert_eq!(
+            output.cursor,
+            Some((gutter_width as u16, 0)),
+            "RENDERED cursor in empty buffer should be at gutter_width ({}), got {:?}",
+            gutter_width,
+            output.cursor
+        );
+
+        let final_cursor = SplitRenderer::resolve_cursor_fallback(
+            output.cursor,
+            cursor_pos,
+            buffer_len,
+            buffer_newline,
+            output.last_line_end,
+            output.content_lines_rendered,
+            gutter_width,
+        );
+
+        // Cursor should be at (gutter_width, 0) - right after the gutter on line 0
+        assert_eq!(
+            final_cursor,
+            Some((gutter_width as u16, 0)),
+            "Cursor in empty buffer with gutters should be at gutter_width, not column 0"
+        );
     }
 
     #[test]

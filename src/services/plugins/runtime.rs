@@ -3101,7 +3101,7 @@ impl TypeScriptRuntime {
 // === TypeScript Plugin Manager ===
 
 use crate::input::command_registry::CommandRegistry;
-use crate::services::plugins::hooks::{HookArgs, HookRegistry};
+use crate::services::plugins::hooks::{hook_args_to_json, HookArgs, HookRegistry};
 use std::path::{Path, PathBuf};
 
 /// Information about a loaded TypeScript plugin
@@ -3284,260 +3284,12 @@ impl TypeScriptPluginManager {
     /// This converts HookArgs to JSON and emits to all registered TypeScript handlers.
     pub async fn run_hook(&mut self, hook_name: &str, args: &HookArgs) -> Result<()> {
         // Convert HookArgs to JSON
-        let json_data = self.hook_args_to_json(args)?;
+        let json_data = hook_args_to_json(args)?;
 
         // Emit to TypeScript handlers
         self.runtime.emit(hook_name, &json_data).await?;
 
         Ok(())
-    }
-
-    /// Convert HookArgs to JSON string
-    fn hook_args_to_json(&self, args: &HookArgs) -> Result<String> {
-        let json_value = match args {
-            HookArgs::RenderStart { buffer_id } => {
-                serde_json::json!({
-                    "buffer_id": buffer_id.0,
-                })
-            }
-            HookArgs::RenderLine {
-                buffer_id,
-                line_number,
-                byte_start,
-                byte_end,
-                content,
-            } => {
-                serde_json::json!({
-                    "buffer_id": buffer_id.0,
-                    "line_number": line_number,
-                    "byte_start": byte_start,
-                    "byte_end": byte_end,
-                    "content": content,
-                })
-            }
-            HookArgs::BufferActivated { buffer_id } => {
-                serde_json::json!({ "buffer_id": buffer_id.0 })
-            }
-            HookArgs::BufferDeactivated { buffer_id } => {
-                serde_json::json!({ "buffer_id": buffer_id.0 })
-            }
-            HookArgs::BufferClosed { buffer_id } => {
-                serde_json::json!({ "buffer_id": buffer_id.0 })
-            }
-            HookArgs::CursorMoved {
-                buffer_id,
-                cursor_id,
-                old_position,
-                new_position,
-            } => {
-                serde_json::json!({
-                    "buffer_id": buffer_id.0,
-                    "cursor_id": cursor_id.0,
-                    "old_position": old_position,
-                    "new_position": new_position,
-                })
-            }
-            HookArgs::BeforeInsert {
-                buffer_id,
-                position,
-                text,
-            } => {
-                serde_json::json!({
-                    "buffer_id": buffer_id.0,
-                    "position": position,
-                    "text": text,
-                })
-            }
-            HookArgs::AfterInsert {
-                buffer_id,
-                position,
-                text,
-                affected_start,
-                affected_end,
-            } => {
-                serde_json::json!({
-                    "buffer_id": buffer_id.0,
-                    "position": position,
-                    "text": text,
-                    "affected_start": affected_start,
-                    "affected_end": affected_end,
-                })
-            }
-            HookArgs::BeforeDelete { buffer_id, range } => {
-                serde_json::json!({
-                    "buffer_id": buffer_id.0,
-                    "start": range.start,
-                    "end": range.end,
-                })
-            }
-            HookArgs::AfterDelete {
-                buffer_id,
-                range,
-                deleted_text,
-                affected_start,
-                deleted_len,
-            } => {
-                serde_json::json!({
-                    "buffer_id": buffer_id.0,
-                    "start": range.start,
-                    "end": range.end,
-                    "deleted_text": deleted_text,
-                    "affected_start": affected_start,
-                    "deleted_len": deleted_len,
-                })
-            }
-            HookArgs::BeforeFileOpen { path } => {
-                serde_json::json!({ "path": path.to_string_lossy() })
-            }
-            HookArgs::AfterFileOpen { path, buffer_id } => {
-                serde_json::json!({
-                    "path": path.to_string_lossy(),
-                    "buffer_id": buffer_id.0,
-                })
-            }
-            HookArgs::BeforeFileSave { path, buffer_id } => {
-                serde_json::json!({
-                    "path": path.to_string_lossy(),
-                    "buffer_id": buffer_id.0,
-                })
-            }
-            HookArgs::AfterFileSave { path, buffer_id } => {
-                serde_json::json!({
-                    "path": path.to_string_lossy(),
-                    "buffer_id": buffer_id.0,
-                })
-            }
-            HookArgs::PreCommand { action } => {
-                serde_json::json!({ "action": format!("{:?}", action) })
-            }
-            HookArgs::PostCommand { action } => {
-                serde_json::json!({ "action": format!("{:?}", action) })
-            }
-            HookArgs::Idle { milliseconds } => {
-                serde_json::json!({ "milliseconds": milliseconds })
-            }
-            HookArgs::EditorInitialized => {
-                serde_json::json!({})
-            }
-            HookArgs::PromptChanged { prompt_type, input } => {
-                serde_json::json!({
-                    "prompt_type": prompt_type,
-                    "input": input,
-                })
-            }
-            HookArgs::PromptConfirmed {
-                prompt_type,
-                input,
-                selected_index,
-            } => {
-                serde_json::json!({
-                    "prompt_type": prompt_type,
-                    "input": input,
-                    "selected_index": selected_index,
-                })
-            }
-            HookArgs::PromptCancelled { prompt_type, input } => {
-                serde_json::json!({
-                    "prompt_type": prompt_type,
-                    "input": input,
-                })
-            }
-            HookArgs::KeyboardShortcuts { bindings } => {
-                let entries: Vec<serde_json::Value> = bindings
-                    .iter()
-                    .map(|(key, action)| {
-                        serde_json::json!({
-                            "key": key,
-                            "action": action,
-                        })
-                    })
-                    .collect();
-                serde_json::json!({ "bindings": entries })
-            }
-            HookArgs::ManualPage => {
-                serde_json::json!({})
-            }
-            HookArgs::LspReferences { symbol, locations } => {
-                let locs: Vec<serde_json::Value> = locations
-                    .iter()
-                    .map(|loc| {
-                        serde_json::json!({
-                            "file": loc.file,
-                            "line": loc.line,
-                            "column": loc.column,
-                        })
-                    })
-                    .collect();
-                serde_json::json!({ "symbol": symbol, "locations": locs })
-            }
-            HookArgs::LinesChanged { buffer_id, lines } => {
-                let lines_json: Vec<serde_json::Value> = lines
-                    .iter()
-                    .map(|line| {
-                        serde_json::json!({
-                            "line_number": line.line_number,
-                            "byte_start": line.byte_start,
-                            "byte_end": line.byte_end,
-                            "content": line.content,
-                        })
-                    })
-                    .collect();
-                serde_json::json!({
-                    "buffer_id": buffer_id.0,
-                    "lines": lines_json,
-                })
-            }
-            HookArgs::ViewTransformRequest {
-                buffer_id,
-                split_id,
-                viewport_start,
-                viewport_end,
-                tokens,
-            } => {
-                use crate::services::plugins::api::ViewTokenWireKind;
-                let tokens_json: Vec<serde_json::Value> = tokens
-                    .iter()
-                    .map(|token| {
-                        let kind_json = match &token.kind {
-                            ViewTokenWireKind::Text(s) => serde_json::json!({ "Text": s }),
-                            ViewTokenWireKind::Newline => serde_json::json!("Newline"),
-                            ViewTokenWireKind::Space => serde_json::json!("Space"),
-                            ViewTokenWireKind::Break => serde_json::json!("Break"),
-                            ViewTokenWireKind::BinaryByte(b) => {
-                                serde_json::json!({ "BinaryByte": b })
-                            }
-                        };
-                        serde_json::json!({
-                            "source_offset": token.source_offset,
-                            "kind": kind_json,
-                        })
-                    })
-                    .collect();
-                serde_json::json!({
-                    "buffer_id": buffer_id.0,
-                    "split_id": split_id.0,
-                    "viewport_start": viewport_start,
-                    "viewport_end": viewport_end,
-                    "tokens": tokens_json,
-                })
-            }
-            HookArgs::MouseClick {
-                column,
-                row,
-                button,
-                modifiers,
-            } => {
-                serde_json::json!({
-                    "column": column,
-                    "row": row,
-                    "button": button,
-                    "modifiers": modifiers,
-                })
-            }
-        };
-
-        serde_json::to_string(&json_value)
-            .map_err(|e| anyhow!("Failed to serialize hook args: {}", e))
     }
 
     /// Get access to the state snapshot for updating (used by Editor)
@@ -4944,16 +4696,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_ts_plugin_manager_hook_args_to_json() {
-        let hooks = Arc::new(RwLock::new(HookRegistry::new()));
-        let commands = Arc::new(RwLock::new(CommandRegistry::new()));
-
-        let manager = TypeScriptPluginManager::new(hooks, commands).unwrap();
-
-        // Test various hook args conversions
+        // Test various hook args conversions using the shared function
         let args = HookArgs::BufferActivated {
             buffer_id: BufferId(5),
         };
-        let json = manager.hook_args_to_json(&args).unwrap();
+        let json = hook_args_to_json(&args).unwrap();
         assert!(json.contains("\"buffer_id\":5"));
 
         let args = HookArgs::CursorMoved {
@@ -4962,13 +4709,13 @@ mod tests {
             old_position: 10,
             new_position: 20,
         };
-        let json = manager.hook_args_to_json(&args).unwrap();
+        let json = hook_args_to_json(&args).unwrap();
         assert!(json.contains("\"buffer_id\":1"));
         assert!(json.contains("\"old_position\":10"));
         assert!(json.contains("\"new_position\":20"));
 
         let args = HookArgs::EditorInitialized;
-        let json = manager.hook_args_to_json(&args).unwrap();
+        let json = hook_args_to_json(&args).unwrap();
         assert_eq!(json, "{}");
     }
 

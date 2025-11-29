@@ -370,7 +370,17 @@ impl Editor {
         height: u16,
         working_dir: Option<PathBuf>,
     ) -> io::Result<Self> {
-        Self::with_custom_backend(config, width, height, working_dir, None)
+        Self::with_options(config, width, height, working_dir, None, true)
+    }
+
+    /// Create a new editor with plugins disabled
+    pub fn with_plugins_disabled(
+        config: Config,
+        width: u16,
+        height: u16,
+        working_dir: Option<PathBuf>,
+    ) -> io::Result<Self> {
+        Self::with_options(config, width, height, working_dir, None, false)
     }
 
     /// Create a new editor with a custom filesystem backend (for testing)
@@ -382,18 +392,19 @@ impl Editor {
         working_dir: Option<PathBuf>,
         fs_backend: Arc<dyn FsBackend>,
     ) -> io::Result<Self> {
-        Self::with_custom_backend(config, width, height, working_dir, Some(fs_backend))
+        Self::with_options(config, width, height, working_dir, Some(fs_backend), true)
     }
 
-    /// Create a new editor with a custom filesystem backend
+    /// Create a new editor with custom options
     /// This is primarily used for testing with slow or mock backends
     /// to verify editor behavior under various I/O conditions
-    fn with_custom_backend(
+    fn with_options(
         config: Config,
         width: u16,
         height: u16,
         working_dir: Option<PathBuf>,
         fs_backend: Option<Arc<dyn FsBackend>>,
+        enable_plugins: bool,
     ) -> io::Result<Self> {
         tracing::info!("Editor::new called with width={}, height={}", width, height);
 
@@ -483,23 +494,27 @@ impl Editor {
         // Initialize plugin system
         let command_registry = Arc::new(RwLock::new(CommandRegistry::new()));
 
-        // Initialize TypeScript plugin thread
-        let ts_plugin_manager = match PluginThreadHandle::spawn(Arc::clone(&command_registry)) {
-            Ok(handle) => Some(handle),
-            Err(e) => {
-                tracing::error!("Failed to spawn TypeScript plugin thread: {}", e);
-                // In debug/test builds, panic to surface the error
-                #[cfg(debug_assertions)]
-                panic!("TypeScript plugin thread creation failed: {}", e);
-                #[cfg(not(debug_assertions))]
-                None
+        // Initialize TypeScript plugin thread (skip if plugins are disabled)
+        let ts_plugin_manager = if enable_plugins {
+            match PluginThreadHandle::spawn(Arc::clone(&command_registry)) {
+                Ok(handle) => Some(handle),
+                Err(e) => {
+                    tracing::error!("Failed to spawn TypeScript plugin thread: {}", e);
+                    // In debug/test builds, panic to surface the error
+                    #[cfg(debug_assertions)]
+                    panic!("TypeScript plugin thread creation failed: {}", e);
+                    #[cfg(not(debug_assertions))]
+                    None
+                }
             }
+        } else {
+            tracing::info!("Plugins disabled via --no-plugins flag");
+            None
         };
 
         // Load TypeScript plugins from multiple directories:
         // 1. Next to the executable (for cargo-dist installations)
         // 2. In the working directory (for development/local usage)
-        let ts_plugin_manager = ts_plugin_manager;
         if let Some(ref manager) = ts_plugin_manager {
             let mut plugin_dirs: Vec<std::path::PathBuf> = vec![];
 

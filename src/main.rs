@@ -22,12 +22,25 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 /// A high-performance terminal text editor
 #[derive(Parser, Debug)]
-#[command(name = "editor")]
+#[command(name = "fresh")]
 #[command(about = "A terminal text editor with multi-cursor support", long_about = None)]
+#[command(version)]
 struct Args {
     /// File to open
     #[arg(value_name = "FILE")]
     file: Option<PathBuf>,
+
+    /// Disable plugin loading
+    #[arg(long)]
+    no_plugins: bool,
+
+    /// Path to configuration file
+    #[arg(long, value_name = "PATH")]
+    config: Option<PathBuf>,
+
+    /// Path to log file for editor diagnostics
+    #[arg(long, value_name = "PATH", default_value = "/tmp/editor.log")]
+    log_file: PathBuf,
 
     /// Enable event logging to the specified file
     #[arg(long, value_name = "LOG_FILE")]
@@ -73,7 +86,7 @@ fn main() -> io::Result<()> {
 
     // Initialize tracing - log to a file to avoid interfering with terminal UI
     // Fall back to no logging if the log file can't be created
-    if let Ok(log_file) = std::fs::File::create("/tmp/editor.log") {
+    if let Ok(log_file) = std::fs::File::create(&args.log_file) {
         tracing_subscriber::registry()
             .with(fmt::layer().with_writer(std::sync::Arc::new(log_file)))
             .with(EnvFilter::from_default_env().add_directive(tracing::Level::DEBUG.into()))
@@ -97,7 +110,17 @@ fn main() -> io::Result<()> {
     }));
 
     // Load configuration
-    let config = config::Config::default();
+    let config = if let Some(config_path) = &args.config {
+        match config::Config::load_from_file(config_path) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("Error: Failed to load config from {}: {}", config_path.display(), e);
+                return Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string()));
+            }
+        }
+    } else {
+        config::Config::default()
+    };
 
     // Set up terminal first
     enable_raw_mode()?;
@@ -142,7 +165,11 @@ fn main() -> io::Result<()> {
     };
 
     // Create editor with actual terminal size and working directory
-    let mut editor = Editor::with_working_dir(config, size.width, size.height, working_dir)?;
+    let mut editor = if args.no_plugins {
+        Editor::with_plugins_disabled(config, size.width, size.height, working_dir)?
+    } else {
+        Editor::with_working_dir(config, size.width, size.height, working_dir)?
+    };
 
     // Enable event log streaming if requested
     if let Some(log_path) = &args.event_log {

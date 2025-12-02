@@ -273,7 +273,10 @@ impl FileOpenState {
                     }
                     (false, false) => {
                         // Neither match: keep alphabetical order
-                        a.fs_entry.name.to_lowercase().cmp(&b.fs_entry.name.to_lowercase())
+                        a.fs_entry
+                            .name
+                            .to_lowercase()
+                            .cmp(&b.fs_entry.name.to_lowercase())
                     }
                 }
             });

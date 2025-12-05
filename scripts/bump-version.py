@@ -33,7 +33,14 @@ def print_usage():
     print("  4. Update Cargo.toml and Cargo.lock")
     print("  5. Optionally generate release notes")
     print("  6. Ask to commit, tag, and push the changes")
-    print("  7. Publish to crates.io")
+    print("")
+    print("GitHub Actions will then automatically:")
+    print("  - Build binaries for all platforms")
+    print("  - Create GitHub Release")
+    print("  - Publish to crates.io")
+    print("  - Publish to npm")
+    print("  - Update Homebrew tap")
+    print("  - Update AUR package")
 
 def run_command(command: List[str], capture_output: bool = False, check: bool = True) -> subprocess.CompletedProcess:
     """Runs a shell command."""
@@ -181,7 +188,8 @@ def main() -> None:
         else:
             print(f"  2. Create tag:     {YELLOW}git tag v{new_version}{NC}")
         print(f"  3. Push:           {YELLOW}git push && git push origin v{new_version}{NC}")
-        print(f"  4. Publish:        {YELLOW}cargo publish{NC}")
+        print("")
+        print("GitHub Actions will then automatically publish to all platforms.")
         sys.exit(0)
 
     try:
@@ -209,17 +217,18 @@ def main() -> None:
         print(f"{GREEN}✓{NC} Pushed")
 
         print("")
-        print(f"{BLUE}Step 7:{NC} Publishing to crates.io...")
-        run_command(["cargo", "publish"])
-        print(f"{GREEN}✓{NC} Published to crates.io")
-
-        print("")
         print(f"{GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{NC}")
-        print(f"{GREEN}✓ Version {new_version} released!{NC}")
+        print(f"{GREEN}✓ Version {new_version} tagged and pushed!{NC}")
         print("")
-        print("The GitHub Actions workflow will automatically create a release from the tag.")
-        print("Once the GitHub Release action completes, you will need to manually publish the npm package:")
-        print(f"  {YELLOW}npm publish https://github.com/sinelaw/fresh/releases/download/v{new_version}/fresh-editor-npm-package.tar.gz{NC}")
+        print("GitHub Actions will now automatically:")
+        print(f"  - Build binaries for all platforms")
+        print(f"  - Create GitHub Release")
+        print(f"  - Publish to crates.io")
+        print(f"  - Publish to npm (@fresh-editor/fresh-editor)")
+        print(f"  - Update Homebrew tap (sinelaw/fresh)")
+        print(f"  - Update AUR package (fresh-editor)")
+        print("")
+        print(f"Monitor progress at: {BLUE}https://github.com/sinelaw/fresh/actions{NC}")
 
     except subprocess.CalledProcessError as e:
         print(f"{RED}An error occurred during git operations: {e}{NC}")

@@ -29,5 +29,7 @@ tap = "sinelaw/homebrew-fresh"
 publish-jobs = ["homebrew", "./npm-publish"]
 # Custom permissions for npm-publish job (adds contents: read to the default id-token: write, packages: write)
 github-custom-job-permissions = { "npm-publish" = { id-token = "write", contents = "read" } }
+# Enable GitHub attestations (also adds id-token: write permission needed for npm OIDC)
+github-attestations = true
 # Post-announce jobs to run in CI
 post-announce-jobs = ["./aur-publish", "./cargo-publish"]

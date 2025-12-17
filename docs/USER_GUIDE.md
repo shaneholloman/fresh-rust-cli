@@ -201,15 +201,49 @@ To prevent LSP servers from consuming too many resources, Fresh can limit their 
 
 For more information on how to configure resource limits, see the `docs/PROCESS_LIMITS.md` file.
 
-## macOS Keys Config
+## Keyboard Config
 
-### Configuring Shift + Arrow Key Shortcuts in Terminal.app
+Many OSes, window managers and terminal applications capture keys and filter them out so that applications like Fresh, running in the terminal, don't actually have a chance to handle those keys.
+
+### Linux: XFCE window manager Ctrl + Alt + Up/Down keys - Disabling Workspace Switching Shortcuts
+
+Follow these steps to clear the **Ctrl + Alt + Up** and **Ctrl + Alt + Down** shortcuts so they can be used in other applications (like `fresh`).
+
+---
+
+#### Step-by-Step Instructions
+
+1.  **Open Settings**: Open the XFCE Application Menu and go to **Settings** > **Window Manager**.
+2.  **Navigate to Keyboard**: Click on the **Keyboard** tab.
+3.  **Find Workspace Shortcuts**: Scroll through the list of actions to find:
+    * `Upper workspace`
+    * `Bottom workspace`
+4.  **Clear First Shortcut (Up)**:
+    * Select the row for **Upper workspace** (usually mapped to `Ctrl+Alt+Up`).
+    * Click the **Clear** button (or double-click the row and press **Backspace**).
+5.  **Clear Second Shortcut (Down)**:
+    * Select the row for **Bottom workspace** (usually mapped to `Ctrl+Alt+Down`).
+    * Click the **Clear** button.
+6.  **Close**: Click **Close** to save the changes.
+
+---
+
+#### Configuration Summary
+
+| Action | Default Shortcut | New Setting |
+| :--- | :--- | :--- |
+| **Upper workspace** | `Ctrl + Alt + Up` | *Cleared / None* |
+| **Bottom workspace** | `Ctrl + Alt + Down` | *Cleared / None* |
+
+*Note: If you still experience issues, check **Settings** > **Keyboard** > **Application Shortcuts** to ensure no custom commands are overriding these keys.*
+
+### macOS: Shift + Arrow Key Shortcuts in Terminal.app
 
 Follow these steps to map **Shift + Up** and **Shift + Down** to specific escape sequences in your macOS Terminal.
 
 ---
 
-### Step-by-Step Instructions
+#### Step-by-Step Instructions
 
 1.  **Open Settings**: Launch Terminal and go to **Terminal** > **Settings** (or press `Cmd + ,`).
 2.  **Navigate to Keyboard**: Click the **Profiles** tab, then select the **Keyboard** sub-tab.
@@ -230,7 +264,7 @@ Follow these steps to map **Shift + Up** and **Shift + Down** to specific escape
 
 ---
 
-### Configuration Summary
+#### Configuration Summary
 
 | Shortcut | Key | Modifier | Action | Escape Sequence |
 | :--- | :--- | :--- | :--- | :--- |

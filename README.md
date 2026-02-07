@@ -59,6 +59,7 @@ Or, pick your preferred method:
 |----------|--------|
 | macOS | [brew](#brew) |
 | Bazzite/Bluefin/Aurora Linux | [brew](#brew) |
+| Windows | [winget](#windows-winget) |
 | Arch Linux | [AUR](#arch-linux-aur) |
 | Debian/Ubuntu | [.deb](#debianubuntu-deb) |
 | Fedora/RHEL | [.rpm](#fedorarhelopensuse-rpm), [Terra](https://terra.fyralabs.com/) |
@@ -81,6 +82,14 @@ On macOS and some linux distros (Bazzite/Bluefin/Aurora):
 brew tap sinelaw/fresh
 brew install fresh-editor
 ```
+
+### Windows (winget)
+
+```bash
+winget install fresh-editor
+```
+
+Alternatively, Windows users can use [npm](#npm).
 
 ### Arch Linux ([AUR](https://aur.archlinux.org/packages/fresh-editor-bin))
 

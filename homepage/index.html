@@ -1114,6 +1114,16 @@
                 </div>
 
                 <div class="install-card">
+                    <h3>Windows (winget)</h3>
+                    <div class="copyable">
+                        <code id="cmd-winget">winget install fresh-editor</code>
+                        <button class="copy-btn" onclick="copyCode('cmd-winget', this)">
+                            <img src="public/copy-icon.svg" alt="Copy">
+                        </button>
+                    </div>
+                </div>
+
+                <div class="install-card">
                     <h3>Pre-built Binaries</h3>
                     <p class="install-card-note" style="margin-top: 0;">
                         Download pre-built binaries for Linux, macOS, and Windows from
@@ -1238,8 +1248,8 @@
                 full: 'brew install sinelaw/fresh/fresh-editor'
             },
             windows: {
-                display: 'npm i -g @fresh-editor/fresh-editor',
-                full: 'npm install -g @fresh-editor/fresh-editor'
+                display: 'winget install fresh-editor',
+                full: 'winget install fresh-editor'
             }
         };
 

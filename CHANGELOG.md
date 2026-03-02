@@ -1,5 +1,34 @@
 # Release Notes
 
+## 0.2.12
+
+### Features
+
+* **Auto-Close Config**: Separate `auto_close` toggle (default: true) to independently control bracket/quote auto-close, skip-over, and pair deletion — previously coupled to `auto_indent`. Per-language overrides via `languages.<lang>.auto_close` (#1144).
+
+* **Surround Selection**: Typing an opening delimiter with a selection wraps it instead of replacing it (e.g. selecting `hello` and typing `(` produces `(hello)`). Controlled by `auto_surround` config with per-language overrides.
+
+* **Smart Quote Suppression**: Quotes typed inside an existing string no longer auto-close, preventing unwanted doubled quotes (#1142).
+
+* **Read-Only Mode**: Files without write permission and library/toolchain paths (rustup, /usr/include, /nix/store, Homebrew Cellar, .nuget, Xcode SDKs) automatically open as read-only. New "Toggle Read Only" command to override. Status bar shows `[RO]` indicator.
+
+### Bug Fixes
+
+* **Multi-Cursor Enter**: Fixed Enter key in markdown mode only inserting a newline at the last cursor, ignoring secondary cursors. Falls back to built-in insert_newline when multiple cursors are active (#1140).
+
+* **Multi-Cursor Position Drift**: Fixed cursors with no events during bulk edits (e.g. Delete at end of buffer) drifting to stale positions. Uses saturating arithmetic to prevent overflow with overlapping selections (#1140).
+
+### Improvements
+
+* **Log Noise Reduction**: Disabled span close events (~90% of log volume) by default and moved 12 high-frequency log sites to trace level. Typical log size reduced from ~266MB to ~5-10MB. Set `FRESH_LOG_SPANS=1` to re-enable (#1154).
+
+### Internal
+
+* Added multi-cursor shadow model property-based tests with random operation sequences across 2-3 cursors.
+* Added e2e regression tests for multi-cursor Enter with auto_indent, Ctrl+D selection, tree-sitter, and markdown grammar.
+
+---
+
 ## 0.2.11
 
 ### Features

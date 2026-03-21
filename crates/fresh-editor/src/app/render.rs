@@ -2,6 +2,11 @@ use super::*;
 use anyhow::Result as AnyhowResult;
 use rust_i18n::t;
 
+enum SearchDirection {
+    Forward,
+    Backward,
+}
+
 impl Editor {
     /// Render the editor to the terminal
     pub fn render(&mut self, frame: &mut Frame) {
@@ -2822,7 +2827,23 @@ impl Editor {
     /// is used directly and viewport overlays are refreshed after the cursor
     /// moves.
     pub(super) fn find_next(&mut self) {
-        // For small files, try overlay-based positions first (auto-updated)
+        self.find_match_in_direction(SearchDirection::Forward);
+    }
+
+    /// Find the previous match.
+    ///
+    /// For small files, overlay markers are used as the source of truth
+    /// (they auto-track buffer edits).  For large files, `search_state.matches`
+    /// is used directly and viewport overlays are refreshed.
+    pub(super) fn find_previous(&mut self) {
+        self.find_match_in_direction(SearchDirection::Backward);
+    }
+
+    /// Navigate to the next or previous search match relative to the current
+    /// cursor position. This matches standard editor behavior (VS Code,
+    /// IntelliJ, etc.) where find always searches from the cursor, not from
+    /// a stored match index.
+    fn find_match_in_direction(&mut self, direction: SearchDirection) {
         let overlay_positions = self.get_search_match_positions();
         let is_large = self.active_state().buffer.is_large_file();
 
@@ -2841,18 +2862,64 @@ impl Editor {
                 return;
             }
 
-            let current_index = search_state.current_match_index.unwrap_or(0);
-            let next_index = if current_index + 1 < match_positions.len() {
-                current_index + 1
-            } else if search_state.wrap_search {
-                0 // Wrap to beginning
-            } else {
-                self.set_status_message(t!("search.no_matches").to_string());
-                return;
+            let cursor_pos = {
+                let active_split = self.split_manager.active_split();
+                self.split_view_states
+                    .get(&active_split)
+                    .map(|vs| vs.cursors.primary().position)
+                    .unwrap_or(0)
             };
 
-            search_state.current_match_index = Some(next_index);
-            let match_pos = match_positions[next_index];
+            let target_index = match direction {
+                SearchDirection::Forward => {
+                    // First match strictly after the cursor position.
+                    let idx = match match_positions.binary_search(&(cursor_pos + 1)) {
+                        Ok(i) | Err(i) => {
+                            if i < match_positions.len() {
+                                Some(i)
+                            } else {
+                                None
+                            }
+                        }
+                    };
+                    match idx {
+                        Some(i) => i,
+                        None if search_state.wrap_search => 0,
+                        None => {
+                            self.set_status_message(t!("search.no_matches").to_string());
+                            return;
+                        }
+                    }
+                }
+                SearchDirection::Backward => {
+                    // Last match strictly before the cursor position.
+                    let idx = if cursor_pos == 0 {
+                        None
+                    } else {
+                        match match_positions.binary_search(&(cursor_pos - 1)) {
+                            Ok(i) => Some(i),
+                            Err(i) => {
+                                if i > 0 {
+                                    Some(i - 1)
+                                } else {
+                                    None
+                                }
+                            }
+                        }
+                    };
+                    match idx {
+                        Some(i) => i,
+                        None if search_state.wrap_search => match_positions.len() - 1,
+                        None => {
+                            self.set_status_message(t!("search.no_matches").to_string());
+                            return;
+                        }
+                    }
+                }
+            };
+
+            search_state.current_match_index = Some(target_index);
+            let match_pos = match_positions[target_index];
             let matches_len = match_positions.len();
 
             {
@@ -2869,74 +2936,7 @@ impl Editor {
             self.set_status_message(
                 t!(
                     "search.match_of",
-                    current = next_index + 1,
-                    total = matches_len
-                )
-                .to_string(),
-            );
-
-            if is_large {
-                self.refresh_search_overlays();
-            }
-        } else {
-            let find_key = self
-                .get_keybinding_for_action("find")
-                .unwrap_or_else(|| "Ctrl+F".to_string());
-            self.set_status_message(t!("search.no_active", find_key = find_key).to_string());
-        }
-    }
-
-    /// Find the previous match.
-    ///
-    /// For small files, overlay markers are used as the source of truth
-    /// (they auto-track buffer edits).  For large files, `search_state.matches`
-    /// is used directly and viewport overlays are refreshed.
-    pub(super) fn find_previous(&mut self) {
-        let overlay_positions = self.get_search_match_positions();
-        let is_large = self.active_state().buffer.is_large_file();
-
-        if let Some(ref mut search_state) = self.search_state {
-            let use_overlays =
-                !is_large && !overlay_positions.is_empty() && search_state.search_range.is_none();
-            let match_positions: &[usize] = if use_overlays {
-                &overlay_positions
-            } else {
-                &search_state.matches
-            };
-
-            if match_positions.is_empty() {
-                return;
-            }
-
-            let current_index = search_state.current_match_index.unwrap_or(0);
-            let prev_index = if current_index > 0 {
-                current_index - 1
-            } else if search_state.wrap_search {
-                match_positions.len() - 1 // Wrap to end
-            } else {
-                self.set_status_message(t!("search.no_matches").to_string());
-                return;
-            };
-
-            search_state.current_match_index = Some(prev_index);
-            let match_pos = match_positions[prev_index];
-            let matches_len = match_positions.len();
-
-            {
-                let active_split = self.split_manager.active_split();
-                let active_buffer = self.active_buffer();
-                if let Some(view_state) = self.split_view_states.get_mut(&active_split) {
-                    view_state.cursors.primary_mut().position = match_pos;
-                    view_state.cursors.primary_mut().anchor = None;
-                    let state = self.buffers.get_mut(&active_buffer).unwrap();
-                    view_state.ensure_cursor_visible(&mut state.buffer, &state.marker_list);
-                }
-            }
-
-            self.set_status_message(
-                t!(
-                    "search.match_of",
-                    current = prev_index + 1,
+                    current = target_index + 1,
                     total = matches_len
                 )
                 .to_string(),

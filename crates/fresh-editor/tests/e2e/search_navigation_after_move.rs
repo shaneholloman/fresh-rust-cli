@@ -259,20 +259,30 @@ fn test_find_next_respects_cursor_position_large_file() {
 
     let mut file = std::fs::File::create(&file_path).unwrap();
 
-    // ~1.4MB of filler, then NEEDLE #1
-    for i in 0..20_000 {
-        writeln!(file, "Line {:06}: filler padding to bulk up the file.", i).unwrap();
+    // ~1.2MB of filler, then NEEDLE #1
+    for i in 0..25_000 {
+        writeln!(
+            file,
+            "Line {:06}: filler padding to bulk up the file size.",
+            i
+        )
+        .unwrap();
     }
     writeln!(file, "first NEEDLE here").unwrap(); // match 1
 
-    // ~1.4MB of filler, then NEEDLE #2
-    for i in 0..20_000 {
-        writeln!(file, "Line {:06}: more filler content in the middle.", i).unwrap();
+    // ~1.2MB of filler, then NEEDLE #2
+    for i in 0..25_000 {
+        writeln!(
+            file,
+            "Line {:06}: more filler content in the middle area.",
+            i
+        )
+        .unwrap();
     }
     writeln!(file, "second NEEDLE here").unwrap(); // match 2
 
-    // ~1.4MB of filler, then NEEDLE #3
-    for i in 0..20_000 {
+    // ~1.2MB of filler, then NEEDLE #3
+    for i in 0..25_000 {
         writeln!(file, "Line {:06}: yet more filler near the end of file.", i).unwrap();
     }
     writeln!(file, "third NEEDLE here").unwrap(); // match 3
@@ -389,9 +399,9 @@ fn test_find_previous_from_end_of_large_file_issue_1305() {
 
     let mut file = std::fs::File::create(&file_path).unwrap();
 
-    // Build a ~4MB file with NEEDLE near the end (as described in issue 1305:
+    // Build a >3MB file with NEEDLE near the end (as described in issue 1305:
     // "phrase is close to end of file")
-    for i in 0..55_000 {
+    for i in 0..65_000 {
         writeln!(
             file,
             "Line {:06}: padding content to bulk up the file size.",

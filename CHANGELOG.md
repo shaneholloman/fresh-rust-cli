@@ -1,5 +1,49 @@
 # Release Notes
 
+## 0.2.22
+
+### Features
+
+* **Review Diff Rewrite**: The review diff view has been rewritten with a magit-style split-panel UI. The left panel lists files grouped by staged/unstaged/untracked sections (sorted by category), and the right panel shows the diff for the selected file. Navigate with arrow keys, switch focus between panels with Tab, and drill down into individual files. Hunk navigation jumps between changes with auto-centering. Untracked and newly added files are now shown correctly. Diff colors are now theme-aware with per-theme highlight overrides.
+
+* **Remote Mode**: SSH connections now auto-reconnect in the background with a disconnected indicator in the status bar. Filesystem operations no longer block the event loop. File explorer roots at the provided remote path instead of the home directory. File finder (Ctrl+P) works on remote filesystems. Error messages are cleaner — hints about SSH installation, and a "Connecting via SSH to ..." message on startup.
+
+### Improvements
+
+* **Create Directories on Save**: When saving a file to a path where the parent directory doesn't exist, Fresh now prompts to create the directory instead of failing (#1434).
+
+* **Grammar Short Name Aliases**: Grammars can now be referenced by short names (e.g., `"bash"` instead of `"Bourne Again Shell (bash)"`) in config and the Set Language popup. Packages can declare a `shortName` in their grammar definition.
+
+* **Default Language Setting**: The `default_language` setting replaces the previous `fallback` object. Set it to a language key (e.g., `"bash"`) so unrecognized file types use that language's full configuration (#1219).
+
+* **AutoHotkey Syntax Highlighting**: Built-in grammar for `.ahk` and `.ahk2` files with v1/v2 command coverage.
+
+* **Settings UI**: Added inherit/unset support for nullable settings with an Inherit button and inherited badge. The Delete key now unsets a setting override.
+
+* **Theme Selector**: Installed theme packages now appear correctly even when multiple themes share the same name. The selector strips URL schemes and sizes the name column to content.
+
+* **File Finder (Ctrl+P)**: Fixed showing no files on Windows when git isn't being used.
+
+* **Selection Prompts**: Pre-filled text is now selected so typing immediately replaces it.
+
+* **Theme Fixes**: Fixed low contrast in Nord, Solarized Dark, Light, and Dracula themes. Fixed command palette selected row using wrong foreground color. Syntax highlighting colors are now preserved in text selections.
+
+### Bug Fixes
+
+* Fixed out-of-memory crash caused by an infinite loop in the line-wrapping transform when indentation exceeds half the available width (#1454).
+
+* Fixed `didOpen` notification only being sent to the first LSP server when multiple are configured for a language.
+
+* Fixed status bar line number not updating when stepping through search matches with F3.
+
+* Fixed `.bash_profile` appearing read-only when symlinked to a macOS library path (#1469).
+
+* Fixed session `open-file` command failing when a session exists but its name doesn't match the socket.
+
+* Fixed scrollbar track hover highlighting more than the hovered cell.
+
+* Fixed self-update URL pattern not matching all release URLs.
+
 ## 0.2.21
 
 ### Features

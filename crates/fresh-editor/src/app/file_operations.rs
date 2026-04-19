@@ -25,10 +25,11 @@ impl Editor {
     /// Save the active buffer
     pub fn save(&mut self) -> anyhow::Result<()> {
         // Fail fast if remote connection is down
-        if !self.filesystem.is_remote_connected() {
+        if !self.authority.filesystem.is_remote_connected() {
             anyhow::bail!(
                 "Cannot save: remote connection lost ({})",
-                self.filesystem
+                self.authority
+                    .filesystem
                     .remote_connection_info()
                     .unwrap_or("unknown host")
             );
@@ -57,7 +58,7 @@ impl Editor {
                         .is_some_and(|io_err| io_err.kind() == std::io::ErrorKind::NotFound);
                     if is_not_found {
                         if let Some(parent) = path.parent() {
-                            if !self.filesystem.exists(parent) {
+                            if !self.authority.filesystem.exists(parent) {
                                 let dir_name = parent
                                     .strip_prefix(&self.working_dir)
                                     .unwrap_or(parent)
@@ -121,7 +122,7 @@ impl Editor {
 
         // Update file modification time after save
         if let Some(ref p) = path {
-            if let Ok(metadata) = self.filesystem.metadata(p) {
+            if let Ok(metadata) = self.authority.filesystem.metadata(p) {
                 if let Some(mtime) = metadata.modified {
                     self.file_mod_times.insert(p.clone(), mtime);
                 }
@@ -324,7 +325,7 @@ impl Editor {
             self.config.editor.large_file_threshold_bytes as usize,
             &self.grammar_registry,
             &self.config.languages,
-            std::sync::Arc::clone(&self.filesystem),
+            std::sync::Arc::clone(&self.authority.filesystem),
         )?;
 
         // Restore cursor positions (clamped to valid range for new file size)
@@ -368,7 +369,7 @@ impl Editor {
         self.seen_byte_ranges.remove(&buffer_id);
 
         // Update the file modification time
-        if let Ok(metadata) = self.filesystem.metadata(&path) {
+        if let Ok(metadata) = self.authority.filesystem.metadata(&path) {
             if let Some(mtime) = metadata.modified {
                 self.file_mod_times.insert(path.clone(), mtime);
             }
@@ -452,7 +453,7 @@ impl Editor {
 
         // Spawn background metadata checks
         let (tx, rx) = std::sync::mpsc::channel();
-        let fs = self.filesystem.clone();
+        let fs = self.authority.filesystem.clone();
         std::thread::Builder::new()
             .name("poll-file-changes".to_string())
             .spawn(move || {
@@ -540,7 +541,7 @@ impl Editor {
         if !self.git_index_resolved {
             self.git_index_resolved = true;
             if let Some(path) = self.resolve_git_index() {
-                if let Ok(meta) = self.filesystem.metadata(&path) {
+                if let Ok(meta) = self.authority.filesystem.metadata(&path) {
                     if let Some(mtime) = meta.modified {
                         self.dir_mod_times.insert(path, mtime);
                     }
@@ -574,7 +575,7 @@ impl Editor {
 
         // Spawn background metadata checks (directories + git index)
         let (tx, rx) = std::sync::mpsc::channel();
-        let fs = self.filesystem.clone();
+        let fs = self.authority.filesystem.clone();
         std::thread::Builder::new()
             .name("poll-dir-changes".to_string())
             .spawn(move || {
@@ -670,7 +671,7 @@ impl Editor {
     /// Uses the `ProcessSpawner` so it works transparently on both local
     /// and remote (SSH) filesystems.
     fn resolve_git_index(&self) -> Option<PathBuf> {
-        let spawner = &self.process_spawner;
+        let spawner = &self.authority.process_spawner;
         let cwd = self.working_dir.to_string_lossy().to_string();
 
         // ProcessSpawner is async — run it on the tokio runtime if available,
@@ -725,6 +726,7 @@ impl Editor {
 
         // Check file size
         let file_size = self
+            .authority
             .filesystem
             .metadata(path)
             .ok()
@@ -900,7 +902,7 @@ impl Editor {
     /// This is used by the polling-based auto-revert to detect external changes
     pub(crate) fn watch_file(&mut self, path: &Path) {
         // Record current modification time for polling
-        if let Ok(metadata) = self.filesystem.metadata(path) {
+        if let Ok(metadata) = self.authority.filesystem.metadata(path) {
             if let Some(mtime) = metadata.modified {
                 self.file_mod_times.insert(path.to_path_buf(), mtime);
             }
@@ -1041,7 +1043,7 @@ impl Editor {
             self.config.editor.large_file_threshold_bytes as usize,
             &self.grammar_registry,
             &self.config.languages,
-            std::sync::Arc::clone(&self.filesystem),
+            std::sync::Arc::clone(&self.authority.filesystem),
         )?;
 
         // Get the new file size for clamping
@@ -1079,7 +1081,7 @@ impl Editor {
         self.seen_byte_ranges.remove(&buffer_id);
 
         // Update the file modification time
-        if let Ok(metadata) = self.filesystem.metadata(path) {
+        if let Ok(metadata) = self.authority.filesystem.metadata(path) {
             if let Some(mtime) = metadata.modified {
                 self.file_mod_times.insert(path.to_path_buf(), mtime);
             }
@@ -1123,6 +1125,7 @@ impl Editor {
             // We use optimistic concurrency: check mtime, and if we decide to revert,
             // re-check to handle the race where a save completed between our checks.
             let current_mtime = match self
+                .authority
                 .filesystem
                 .metadata(&path)
                 .ok()
@@ -1199,6 +1202,7 @@ impl Editor {
 
         // Get current file modification time
         let current_mtime = self
+            .authority
             .filesystem
             .metadata(path)
             .ok()

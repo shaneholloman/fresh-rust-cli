@@ -1602,7 +1602,11 @@ impl Editor {
     /// Called on shutdown to persist history across sessions
     pub fn save_histories(&self) {
         // Ensure data directory exists
-        if let Err(e) = self.filesystem.create_dir_all(&self.dir_context.data_dir) {
+        if let Err(e) = self
+            .authority
+            .filesystem
+            .create_dir_all(&self.dir_context.data_dir)
+        {
             tracing::warn!("Failed to create data directory: {}", e);
             return;
         }

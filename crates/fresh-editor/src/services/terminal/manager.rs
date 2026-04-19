@@ -20,6 +20,7 @@
 
 use super::term::TerminalState;
 use crate::services::async_bridge::AsyncBridge;
+use crate::services::authority::TerminalWrapper;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -156,7 +157,7 @@ impl TerminalManager {
         cwd: Option<std::path::PathBuf>,
         log_path: Option<std::path::PathBuf>,
         backing_path: Option<std::path::PathBuf>,
-        terminal_wrapper: Option<crate::services::authority::TerminalWrapper>,
+        terminal_wrapper: crate::services::authority::TerminalWrapper,
     ) -> Result<TerminalId, String> {
         let id = TerminalId(self.next_id);
         self.next_id += 1;
@@ -186,14 +187,17 @@ impl TerminalManager {
                     }
                 })?;
 
-            // Authority may rewrite the shell (e.g. devcontainer provider wraps
-            // in `docker exec -it -u <user> -w <workspace> <id> bash -l`).
-            // The wrapper signals via `manages_cwd` whether cwd is already
-            // handled by its args (and `CommandBuilder::cwd()` must be skipped).
-            let (shell, cmd_args, skip_cwd) = match terminal_wrapper {
-                Some(w) => (w.command, w.args, w.manages_cwd),
-                None => (detect_shell(), vec![], false),
-            };
+            // The active authority's terminal wrapper drives the shell
+            // command unconditionally — local wraps `detect_shell()` with
+            // no args; container/remote authorities re-parent into
+            // `docker exec -w …`, `ssh …`, etc. `manages_cwd` says
+            // whether the wrapper's args already establish cwd (in which
+            // case `CommandBuilder::cwd()` is skipped).
+            let TerminalWrapper {
+                command: shell,
+                args: cmd_args,
+                manages_cwd: skip_cwd,
+            } = terminal_wrapper;
             tracing::info!("Spawning terminal with shell: {}", shell);
 
             let mut cmd = CommandBuilder::new(&shell);

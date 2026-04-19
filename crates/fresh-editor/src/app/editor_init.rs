@@ -330,10 +330,19 @@ impl Editor {
         // Initialize command registry (always available, used by both plugins and core)
         let command_registry = Arc::new(RwLock::new(CommandRegistry::new()));
 
+        // Construct the boot-time authority. Per principle 6, the editor
+        // always boots with a local authority and renders immediately;
+        // SSH startup and plugins replace it via `install_authority`
+        // after their async work is done. The supplied `filesystem`
+        // overrides the local default to support tests that mock IO.
+        let authority = crate::services::authority::Authority {
+            filesystem: Arc::clone(&filesystem),
+            ..crate::services::authority::Authority::local()
+        };
+        let process_spawner = Arc::clone(&authority.process_spawner);
+
         // Initialize Quick Open registry with all providers
         let mut quick_open_registry = QuickOpenRegistry::new();
-        let process_spawner: Arc<dyn crate::services::remote::ProcessSpawner> =
-            Arc::new(crate::services::remote::LocalProcessSpawner);
         quick_open_registry.register(Box::new(FileProvider::new(
             Arc::clone(&filesystem),
             Arc::clone(&process_spawner),
@@ -564,9 +573,9 @@ impl Editor {
             preview: None,
             suppress_position_history_once: false,
             fs_manager,
-            filesystem,
+            authority,
+            pending_authority: None,
             local_filesystem: Arc::new(crate::model::filesystem::StdFileSystem),
-            process_spawner,
             file_explorer_visible: false,
             file_explorer_sync_in_progress: false,
             file_explorer_width_percent: file_explorer_width,
@@ -714,8 +723,6 @@ impl Editor {
             warning_domains: WarningDomainRegistry::new(),
             update_checker,
             terminal_manager: crate::services::terminal::TerminalManager::new(),
-            terminal_wrapper: None,
-            authority_display_string: None,
             terminal_buffers: HashMap::new(),
             terminal_backing_files: HashMap::new(),
             terminal_log_files: HashMap::new(),

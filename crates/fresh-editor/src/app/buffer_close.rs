@@ -67,14 +67,14 @@ impl Editor {
             if let Some(ref path) = backing_file {
                 // Best-effort cleanup of temporary terminal files.
                 #[allow(clippy::let_underscore_must_use)]
-                let _ = self.filesystem.remove_file(path);
+                let _ = self.authority.filesystem.remove_file(path);
             }
             // Clean up raw log file
             if let Some(log_file) = self.terminal_log_files.remove(&terminal_id) {
                 if backing_file.as_ref() != Some(&log_file) {
                     // Best-effort cleanup of temporary terminal files.
                     #[allow(clippy::let_underscore_must_use)]
-                    let _ = self.filesystem.remove_file(&log_file);
+                    let _ = self.authority.filesystem.remove_file(&log_file);
                 }
             }
 

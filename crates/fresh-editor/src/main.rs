@@ -10,16 +10,9 @@ use fresh::services::gpm::{gpm_to_crossterm, GpmClient};
 use fresh::services::terminal_modes::{self, KeyboardConfig, TerminalModes};
 use fresh::services::tracing_setup;
 use fresh::{
-    app::Editor,
-    client, config,
-    config_io::DirectoryContext,
-    model::filesystem::{FileSystem, StdFileSystem},
-    server::SocketPaths,
-    services::release_checker,
-    services::remote,
-    services::signal_handler,
-    services::tracing_setup::TracingHandles,
-    workspace,
+    app::Editor, client, config, config_io::DirectoryContext, server::SocketPaths,
+    services::release_checker, services::remote, services::signal_handler,
+    services::tracing_setup::TracingHandles, workspace,
 };
 use ratatui::Terminal;
 use std::{
@@ -504,10 +497,15 @@ struct SetupState {
     /// Stdin streaming state (if --stdin flag or "-" file was used)
     /// Contains temp file path and background thread handle
     stdin_stream: Option<StdinStreamState>,
-    /// Filesystem implementation (local or remote)
-    filesystem: std::sync::Arc<dyn FileSystem + Send + Sync>,
-    /// Process spawner for plugin command execution (local or remote)
-    process_spawner: std::sync::Arc<dyn remote::ProcessSpawner>,
+    /// Single backend slot for "where does the editor act?".
+    ///
+    /// The editor always boots with `Authority::local()`. The SSH
+    /// startup form (`fresh user@host:path`) replaces it with
+    /// `Authority::ssh(...)` here. Devcontainer attach is now a plugin
+    /// concern (it calls `editor.setAuthority({...})` from
+    /// `plugins/devcontainer.ts` after `devcontainer up` returns) so
+    /// startup never blocks on a container.
+    authority: fresh::services::authority::Authority,
     /// Remote session resources - must be kept alive for remote editing
     _remote_session: Option<RemoteSession>,
     /// Key translator for input calibration
@@ -519,12 +517,6 @@ struct SetupState {
     /// Terminal mode state (raw mode, alternate screen, etc.)
     /// Drop impl restores terminal on cleanup
     terminal_modes: TerminalModes,
-    /// Terminal wrapper from the active authority (e.g. docker exec for a devcontainer).
-    terminal_wrapper: Option<fresh::services::authority::TerminalWrapper>,
-    /// Authority-provided display string (e.g. `Container:abc123`).
-    authority_display_string: Option<String>,
-    /// Status message to display immediately after startup (e.g. devcontainer errors)
-    initial_status_message: Option<String>,
 }
 
 /// State for stdin streaming in background
@@ -1138,28 +1130,33 @@ struct RemoteSession {
     _reconnect_handle: tokio::task::JoinHandle<()>,
 }
 
-/// Result of creating the initial authority - includes optional remote
-/// session that must be kept alive for remote editing.
-struct FilesystemResult {
-    authority: fresh::services::authority::ActiveAuthority,
-    /// Remote session resources - must be kept alive for remote editing
+/// Bundle of the startup authority plus any resources that must stay
+/// alive for the duration of the session (currently only the SSH
+/// connection handle and its reconnect task).
+struct StartupAuthority {
+    authority: fresh::services::authority::Authority,
     remote_session: Option<RemoteSession>,
 }
 
-/// Create filesystem for local or remote editing
-fn create_filesystem(remote_info: &Option<RemoteLocation>) -> AnyhowResult<FilesystemResult> {
+/// Pick the startup authority. Per principle 6, defaults to
+/// `Authority::local()`; SSH CLI form constructs the remote authority
+/// directly. Devcontainer attach is no longer a core startup concern —
+/// the TS plugin handles it post-boot via `editor.setAuthority(...)`.
+fn create_startup_authority(
+    remote_info: &Option<RemoteLocation>,
+) -> AnyhowResult<StartupAuthority> {
     if let Some(remote) = remote_info {
         connect_remote(remote)
     } else {
-        Ok(FilesystemResult {
-            authority: fresh::services::authority::ActiveAuthority::local(),
+        Ok(StartupAuthority {
+            authority: fresh::services::authority::Authority::local(),
             remote_session: None,
         })
     }
 }
 
-/// Establish SSH connection to remote host and return RemoteFileSystem
-fn connect_remote(remote: &RemoteLocation) -> AnyhowResult<FilesystemResult> {
+/// Establish SSH connection to remote host and return `Authority::ssh`.
+fn connect_remote(remote: &RemoteLocation) -> AnyhowResult<StartupAuthority> {
     // Create a Tokio runtime for the SSH connection
     let rt = tokio::runtime::Runtime::new()
         .context("Failed to create Tokio runtime for remote connection")?;
@@ -1200,111 +1197,17 @@ fn connect_remote(remote: &RemoteLocation) -> AnyhowResult<FilesystemResult> {
         remote::spawn_reconnect_task(channel, reconnect_params)
     };
 
-    // SSH authority: remote filesystem + remote spawner. No terminal wrapper
-    // (remote terminal spawn is not yet plumbed — that's the next layer).
-    // Display string comes from the filesystem's `remote_connection_info`.
-    Ok(FilesystemResult {
-        authority: fresh::services::authority::ActiveAuthority {
-            filesystem,
-            process_spawner,
-            terminal_wrapper: None,
-            display_string: None,
-        },
+    // SSH authority: leave the display label empty so the status bar
+    // falls back to `filesystem.remote_connection_info()`, which knows
+    // how to annotate the disconnect state.
+    Ok(StartupAuthority {
+        authority: fresh::services::authority::Authority::ssh(filesystem, process_spawner),
         remote_session: Some(RemoteSession {
             _connection: connection,
             _runtime: rt,
             _reconnect_handle: reconnect_handle,
         }),
     })
-}
-
-/// Start a devcontainer and prepare for container-aware editing.
-///
-/// The devcontainer mounts the local workspace into the container, so files
-/// are accessible via the local filesystem without a remote agent.
-/// This function starts the container (if not already running) and returns
-/// the container ID so that terminal splits can run inside it via `docker exec`.
-fn connect_devcontainer(
-    workspace_path: &Path,
-    cli_path: &str,
-) -> AnyhowResult<(FilesystemResult, PathBuf)> {
-    use fresh::services::devcontainer::DevcontainerCli;
-
-    let rt = tokio::runtime::Runtime::new()
-        .context("Failed to create Tokio runtime for devcontainer")?;
-
-    let cli = if cli_path == "devcontainer" {
-        DevcontainerCli::new()
-    } else {
-        DevcontainerCli::with_path(cli_path.to_string())
-    };
-
-    // Check prerequisites
-    tracing::info!("Checking devcontainer CLI...");
-    if !rt.block_on(cli.is_available()) {
-        anyhow::bail!(
-            "devcontainer CLI not found. Install with: npm install -g @devcontainers/cli"
-        );
-    }
-
-    tracing::info!("Checking Docker...");
-    rt.block_on(cli.check_docker())
-        .context("Docker is not available")?;
-
-    // Build and start the container
-    tracing::info!("Starting devcontainer (this may take a while on first run)...");
-    let up_result = rt
-        .block_on(cli.up(workspace_path))
-        .context("Failed to start devcontainer")?;
-
-    let container_id = up_result.container_id;
-    let container_user = up_result.remote_user;
-    let container_workspace = up_result.remote_workspace_folder;
-    tracing::info!(
-        "Devcontainer ready, container_id={}, user={:?}, workspace={}",
-        container_id,
-        container_user,
-        container_workspace,
-    );
-
-    // Build the docker-exec terminal wrapper. Use "bash" as the container
-    // shell (the host's $SHELL — e.g. zsh — may not exist inside the
-    // container). Pass `-u <user>` and `-w <workspace>` when known.
-    let mut args: Vec<String> = vec!["exec".into(), "-it".into()];
-    if let Some(ref user) = container_user {
-        args.push("-u".into());
-        args.push(user.clone());
-    }
-    args.push("-w".into());
-    args.push(container_workspace.clone());
-    args.push(container_id.clone());
-    args.push("bash".into());
-    args.push("-l".into());
-
-    let short_id = if container_id.len() > 12 {
-        &container_id[..12]
-    } else {
-        container_id.as_str()
-    };
-    let display_string = Some(format!("Container:{}", short_id));
-
-    // The workspace is mounted into the container, so use the local filesystem
-    // for file editing. Terminals are routed via the wrapper below.
-    let result = FilesystemResult {
-        authority: fresh::services::authority::ActiveAuthority {
-            filesystem: std::sync::Arc::new(StdFileSystem),
-            process_spawner: std::sync::Arc::new(remote::LocalProcessSpawner),
-            terminal_wrapper: Some(fresh::services::authority::TerminalWrapper {
-                command: "docker".into(),
-                args,
-                manages_cwd: true,
-            }),
-            display_string,
-        },
-        remote_session: None,
-    };
-
-    Ok((result, workspace_path.to_path_buf()))
 }
 
 fn initialize_app(args: &Args) -> AnyhowResult<SetupState> {
@@ -1430,15 +1333,17 @@ fn initialize_app(args: &Args) -> AnyhowResult<SetupState> {
         })
         .collect();
 
-    // Create filesystem early - needed for remote directory detection
-    // For remote editing, this establishes the SSH connection
-    tracing::info!("Creating filesystem...");
-    let FilesystemResult {
-        mut authority,
+    // Pick the startup authority. Per principle 6, this is `local()`
+    // by default; SSH CLI form swaps in `Authority::ssh(...)` here.
+    // Devcontainer detection is intentionally NOT done here — it moved
+    // into the devcontainer TS plugin so container attach runs
+    // post-boot (see `plugins/devcontainer.ts` and principle 8).
+    tracing::info!("Building startup authority...");
+    let StartupAuthority {
+        authority,
         remote_session,
-    } = create_filesystem(&remote_info)?;
-    let filesystem = authority.filesystem.clone();
-    tracing::info!("Filesystem created");
+    } = create_startup_authority(&remote_info)?;
+    tracing::info!("Startup authority ready");
 
     let mut working_dir = None;
     let mut show_file_explorer = false;
@@ -1448,7 +1353,10 @@ fn initialize_app(args: &Args) -> AnyhowResult<SetupState> {
         if let Some(first_loc) = file_locations.first() {
             // Use the filesystem to check if path is a directory
             // This works for both local and remote paths
-            let is_directory = filesystem.is_dir(&first_loc.path).unwrap_or(false);
+            let is_directory = authority
+                .filesystem
+                .is_dir(&first_loc.path)
+                .unwrap_or(false);
             if is_directory {
                 working_dir = Some(first_loc.path.clone());
                 show_file_explorer = true;
@@ -1458,7 +1366,6 @@ fn initialize_app(args: &Args) -> AnyhowResult<SetupState> {
 
     // Load config using the layered config system
     // For remote editing, use current local dir for config (remote doesn't have our config)
-    // Config is loaded early so devcontainer detection can respect auto_detect setting
     tracing::info!("Loading config...");
     let effective_working_dir = if remote_info.is_some() {
         std::env::current_dir().unwrap_or_default()
@@ -1487,44 +1394,6 @@ fn initialize_app(args: &Args) -> AnyhowResult<SetupState> {
     } else {
         config::Config::load_with_layers(&dir_context, &effective_working_dir)
     };
-
-    // Devcontainer detection: check for .devcontainer config in the target directory.
-    // Falls back to the current working directory so `fresh` (no args) also auto-detects.
-    // When auto_detect is true, connect automatically without prompting (mirrors VS Code behavior).
-    let mut initial_status_message: Option<String> = None;
-    if remote_info.is_none() && config.devcontainer.auto_detect {
-        // Use working_dir when a directory was passed as an argument;
-        // fall back to effective_working_dir (current dir) otherwise.
-        let detect_dir = working_dir
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| effective_working_dir.clone());
-        if let Some(detected) = fresh::services::devcontainer::detect_devcontainer(
-            &detect_dir,
-            authority.filesystem.as_ref(),
-        ) {
-            tracing::info!(
-                "Devcontainer config detected: {}",
-                detected.config_path.display()
-            );
-            match connect_devcontainer(&detected.workspace_path, &config.devcontainer.cli_path) {
-                Ok((result, remote_workspace)) => {
-                    working_dir = Some(remote_workspace);
-                    authority = result.authority;
-                }
-                Err(e) => {
-                    let detail = format!("{:#}", e);
-                    tracing::error!("Devcontainer failed: {}", detail);
-                    initial_status_message = Some(format!(
-                        "Devcontainer failed: {}. Using local filesystem.",
-                        detail
-                    ));
-                }
-            }
-        }
-    }
-    let filesystem = authority.filesystem.clone();
-    let process_spawner = authority.process_spawner.clone();
 
     tracing::info!("Config loaded");
 
@@ -1606,12 +1475,8 @@ fn initialize_app(args: &Args) -> AnyhowResult<SetupState> {
         key_translator,
         gpm_client,
         terminal_modes,
-        filesystem,
-        process_spawner,
+        authority,
         _remote_session: remote_session,
-        terminal_wrapper: authority.terminal_wrapper,
-        authority_display_string: authority.display_string,
-        initial_status_message,
     })
 }
 
@@ -3168,12 +3033,8 @@ fn real_main() -> AnyhowResult<()> {
         #[cfg(not(target_os = "linux"))]
         gpm_client,
         mut terminal_modes,
-        filesystem,
-        process_spawner,
+        authority: startup_authority,
         _remote_session,
-        terminal_wrapper,
-        authority_display_string,
-        initial_status_message,
     } = initialize_app(&args).context("Failed to initialize application")?;
 
     let mut current_working_dir = initial_working_dir;
@@ -3185,6 +3046,13 @@ fn real_main() -> AnyhowResult<()> {
     // Track whether we should restore workspace on restart (for project switching)
     let mut restore_workspace_on_restart = false;
 
+    // Authority that will drive the next `Editor` constructed in the
+    // loop. Starts from the startup authority (local or SSH); when a
+    // plugin calls `editor.setAuthority(...)` the previous Editor
+    // stashes the new authority in its `pending_authority` slot, which
+    // we consume right before dropping it below.
+    let mut current_authority = startup_authority;
+
     // Main editor loop - supports restarting with a new working directory
     // Returns (loop_result, last_update_result) tuple
     let (result, last_update_result) = loop {
@@ -3194,8 +3062,12 @@ fn real_main() -> AnyhowResult<()> {
         // Detect terminal color capability
         let color_capability = fresh::view::color_support::ColorCapability::detect();
 
-        // Use the filesystem created during initialization (supports both local and remote)
-        let fs = filesystem.clone();
+        // The editor constructor still takes a filesystem (tests use
+        // it to inject mocks). The authority we want is installed
+        // immediately after construction via `set_boot_authority`, so
+        // that later init — plugin loading, session restore, the
+        // first event-loop tick — sees the real backend.
+        let fs = current_authority.filesystem.clone();
 
         tracing::info!("Creating editor instance...");
         let mut editor = Editor::with_working_dir(
@@ -3211,6 +3083,11 @@ fn real_main() -> AnyhowResult<()> {
         .context("Failed to create editor instance")?;
         tracing::info!("Editor instance created");
 
+        // Install the real authority before any plugin / init.ts code
+        // runs, so everything that loads below sees the correct
+        // backend from the first tick.
+        editor.set_boot_authority(current_authority.clone());
+
         // User init.ts: auto-load from ~/.config/fresh/init.ts through the
         // same pipeline as "Load Plugin from Buffer". Respects `--no-init`
         // and `--safe`, and is short-circuited by the crash fuse after
@@ -3221,15 +3098,6 @@ fn real_main() -> AnyhowResult<()> {
         // plugins_loaded lifecycle hook so init.ts `on("plugins_loaded",
         // fn)` callbacks can configure plugins via getPluginApi.
         editor.fire_plugins_loaded_hook();
-
-        // Set the process spawner (LocalProcessSpawner for local, RemoteProcessSpawner for remote)
-        editor.set_process_spawner(process_spawner.clone());
-        editor.set_terminal_wrapper(terminal_wrapper.clone());
-        editor.set_authority_display_string(authority_display_string.clone());
-
-        if let Some(ref msg) = initial_status_message {
-            editor.set_status_message(msg.clone());
-        }
 
         #[cfg(target_os = "linux")]
         if gpm_client.is_some() {
@@ -3294,6 +3162,16 @@ fn real_main() -> AnyhowResult<()> {
         let update_result = iteration.update_result;
         let restart_dir = iteration.restart_dir;
         let loop_result = iteration.loop_result;
+
+        // If a plugin called `editor.setAuthority(...)` (or cleared it)
+        // during this iteration, the editor parked the replacement in
+        // `pending_authority` and triggered a restart. Move it into
+        // the loop-local var *before* dropping the editor so the next
+        // iteration builds against the new backend.
+        if let Some(new_authority) = editor.take_pending_authority() {
+            tracing::info!("Authority transition queued; restarting editor");
+            current_authority = new_authority;
+        }
 
         drop(editor);
 

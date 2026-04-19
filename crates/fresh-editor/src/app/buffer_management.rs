@@ -425,7 +425,7 @@ impl Editor {
             self.terminal_width,
             self.terminal_height,
             self.config.editor.large_file_threshold_bytes as usize,
-            Arc::clone(&self.filesystem),
+            Arc::clone(&self.authority.filesystem),
         );
         // Note: line_wrap_enabled is set on SplitViewState.viewport when the split is created
         state

@@ -265,8 +265,8 @@ impl Editor {
 
                     // Read temp file and write via sudo (works for both local and remote)
                     let result = (|| -> anyhow::Result<()> {
-                        let data = self.filesystem.read_file(&info.temp_path)?;
-                        self.filesystem.sudo_write(
+                        let data = self.authority.filesystem.read_file(&info.temp_path)?;
+                        self.authority.filesystem.sudo_write(
                             &info.dest_path,
                             &data,
                             info.mode,
@@ -275,7 +275,7 @@ impl Editor {
                         )?;
                         // Best-effort cleanup of temp file.
                         #[allow(clippy::let_underscore_must_use)]
-                        let _ = self.filesystem.remove_file(&info.temp_path);
+                        let _ = self.authority.filesystem.remove_file(&info.temp_path);
                         Ok(())
                     })();
 
@@ -306,14 +306,14 @@ impl Editor {
                             );
                             // Best-effort cleanup of temp file.
                             #[allow(clippy::let_underscore_must_use)]
-                            let _ = self.filesystem.remove_file(&info.temp_path);
+                            let _ = self.authority.filesystem.remove_file(&info.temp_path);
                         }
                     }
                 } else {
                     self.set_status_message(t!("buffer.save_cancelled").to_string());
                     // Best-effort cleanup of temp file.
                     #[allow(clippy::let_underscore_must_use)]
-                    let _ = self.filesystem.remove_file(&info.temp_path);
+                    let _ = self.authority.filesystem.remove_file(&info.temp_path);
                 }
             }
             PromptType::ConfirmOverwriteFile { path } => {
@@ -328,7 +328,7 @@ impl Editor {
                 let input_lower = input.trim().to_lowercase();
                 if input_lower == "c" || input_lower == "create" {
                     if let Some(parent) = path.parent() {
-                        if let Err(e) = self.filesystem.create_dir_all(parent) {
+                        if let Err(e) = self.authority.filesystem.create_dir_all(parent) {
                             self.set_status_message(
                                 t!("file.error_saving", error = e.to_string()).to_string(),
                             );
@@ -511,7 +511,7 @@ impl Editor {
 
         // Check if parent directory exists
         if let Some(parent) = full_path.parent() {
-            if !parent.as_os_str().is_empty() && !self.filesystem.exists(parent) {
+            if !parent.as_os_str().is_empty() && !self.authority.filesystem.exists(parent) {
                 let dir_name = parent
                     .strip_prefix(&self.working_dir)
                     .unwrap_or(parent)
@@ -591,7 +591,7 @@ impl Editor {
                     self.active_event_log().len()
                 );
 
-                if let Ok(metadata) = self.filesystem.metadata(&full_path) {
+                if let Ok(metadata) = self.authority.filesystem.metadata(&full_path) {
                     if let Some(mtime) = metadata.modified {
                         self.file_mod_times.insert(full_path.clone(), mtime);
                     }
@@ -713,7 +713,11 @@ impl Editor {
 
     /// Save the current rulers setting to the user's config file
     fn save_rulers_to_config(&mut self) {
-        if let Err(e) = self.filesystem.create_dir_all(&self.dir_context.config_dir) {
+        if let Err(e) = self
+            .authority
+            .filesystem
+            .create_dir_all(&self.dir_context.config_dir)
+        {
             tracing::warn!("Failed to create config directory: {}", e);
             return;
         }
@@ -834,6 +838,7 @@ impl Editor {
                 // If so, show confirmation prompt before loading
                 let threshold = self.config.editor.large_file_threshold_bytes as usize;
                 let file_size = self
+                    .authority
                     .filesystem
                     .metadata(path)
                     .map(|m| m.size as usize)

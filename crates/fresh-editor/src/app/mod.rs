@@ -480,15 +480,29 @@ pub struct Editor {
     /// Filesystem manager for file explorer
     fs_manager: Arc<FsManager>,
 
-    /// Filesystem implementation for IO operations
-    filesystem: Arc<dyn FileSystem + Send + Sync>,
+    /// Single backend slot for "where does the editor act?".
+    ///
+    /// Bundles filesystem, process spawner, terminal wrapper, and
+    /// display label. Replaces the old quartet of `filesystem`,
+    /// `process_spawner`, `terminal_wrapper`, `authority_display_string`
+    /// fields. Always present; the editor boots with `Authority::local()`
+    /// and plugins (or the SSH startup flow) install a different one
+    /// later via `install_authority`. Pointer-equality on the inner
+    /// `Arc`s answers "still the same backend?".
+    authority: crate::services::authority::Authority,
 
-    /// Local filesystem for local-only operations (log files, etc.)
-    /// This is always StdFileSystem, even when filesystem is RemoteFileSystem
+    /// Authority queued by `install_authority`, picked up by `main.rs`
+    /// right before dropping this editor on restart. `None` in the
+    /// steady state. Not durable state — restarts from `main.rs`'s
+    /// restart-dir path leave this `None`, and the main loop carries
+    /// the authority over through its own channel.
+    pending_authority: Option<crate::services::authority::Authority>,
+
+    /// Local filesystem for editor-internal files (log files, status
+    /// log). Stays separate from `authority` because these are the
+    /// editor's own private state — they live on the host disk
+    /// regardless of where the user is editing.
     local_filesystem: Arc<dyn FileSystem + Send + Sync>,
-
-    /// Process spawner for plugin command execution (local or remote)
-    process_spawner: Arc<dyn crate::services::remote::ProcessSpawner>,
 
     /// Whether file explorer is visible
     file_explorer_visible: bool,
@@ -948,15 +962,6 @@ pub struct Editor {
 
     /// Terminal manager for built-in terminal support
     terminal_manager: crate::services::terminal::TerminalManager,
-
-    /// Terminal wrapper supplied by the active authority (e.g. docker exec
-    /// for a devcontainer). `None` means spawn the host shell directly.
-    terminal_wrapper: Option<crate::services::authority::TerminalWrapper>,
-
-    /// Display string supplied by the active authority
-    /// (e.g. `"Container:abc123"`). `None` when operating locally.
-    /// Falls back to the filesystem's own connection info for SSH remote.
-    authority_display_string: Option<String>,
 
     /// Maps buffer ID to terminal ID (for terminal buffers)
     terminal_buffers: HashMap<BufferId, crate::services::terminal::TerminalId>,

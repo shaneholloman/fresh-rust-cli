@@ -1,61 +1,297 @@
-//! Active authority abstraction.
+//! Authority — the single backend slot for "where does the editor act?"
 //!
-//! An `ActiveAuthority` bundles the filesystem, process spawner, terminal
-//! wrapping, and display-string surface that describes where the editor is
-//! operating. Today the variants are constructed directly from
-//! `initialize_app` (local, SSH, devcontainer). A future plugin op
-//! (`editor.registerAuthorityProvider`) will let plugins supply providers.
+//! Every primitive the editor exposes — file I/O, integrated terminal,
+//! plugin `spawnProcess`, formatter, LSP server spawn, file watcher,
+//! find-in-files, save, recovery — routes through the active `Authority`.
+//! There is exactly one authority per `Editor` at any moment.
 //!
-//! This is step 3 of `docs/internal/DEVCONTAINER_INTEGRATION_PLAN.md`.
+//! Transitions are atomic and destructive: `Editor::install_authority`
+//! queues the replacement, then piggy-backs on the existing
+//! `request_restart` flow so the whole `Editor` is dropped and rebuilt
+//! around the new authority. Every cached `Arc<dyn FileSystem>`, LSP
+//! handle, terminal PTY, plugin state, and in-flight task goes away
+//! with the old `Editor`; there is no in-place swap and no half-
+//! transitioned window. See `docs/internal/AUTHORITY_DESIGN.md`.
+//!
+//! Authority is opaque to core code. The four fields below are the
+//! entire contract; nothing else inspects whether the backend is local,
+//! SSH, a container, or something a plugin invented.
+//!
+//! ## Construction
+//!
+//! - `Authority::local()` — host filesystem + host spawner + host shell
+//!   wrapped without args. Always available; the editor boots with this.
+//! - `Authority::ssh(filesystem, spawner, display_label)` — used by the
+//!   `fresh user@host:path` startup flow.
+//! - `Authority::from_plugin_payload(payload)` — built from the
+//!   `editor.setAuthority(...)` plugin op. The payload is a tagged shape
+//!   (filesystem kind + spawner kind + terminal wrapper + label); it stays
+//!   small and additive so we can grow new kinds without breaking the
+//!   plugin contract.
 
 use std::sync::Arc;
 
-use crate::model::filesystem::FileSystem;
-use crate::services::remote::ProcessSpawner;
+use serde::{Deserialize, Serialize};
 
-/// How an integrated terminal is spawned under this authority.
+use crate::model::filesystem::{FileSystem, StdFileSystem};
+use crate::services::remote::{LocalProcessSpawner, ProcessSpawner};
+
+/// How the integrated terminal is launched under this authority.
 ///
-/// When `Some`, the `TerminalManager` replaces the local shell command with
-/// `command` + `args` instead of calling `detect_shell()`. Intended for
-/// authorities that re-parent terminals into a container, remote shell,
-/// nix shell, etc.
+/// The terminal manager unconditionally honours this — there is no
+/// "no wrapper" branch.  For local authority, the wrapper command is the
+/// detected host shell with no extra args; `manages_cwd` is false so the
+/// terminal manager calls `CommandBuilder::cwd()` itself.  Authorities
+/// that re-parent the shell (e.g. `docker exec -w <workspace>`) set
+/// `manages_cwd = true` so cwd is left to the wrapper's args.
 #[derive(Debug, Clone)]
 pub struct TerminalWrapper {
-    /// Command to execute instead of the host shell (e.g. `"docker"`).
+    /// Command to execute (e.g. the host shell, `"docker"`, `"ssh"`).
     pub command: String,
-    /// Arguments that make the command drop the user into an interactive
-    /// shell in the right context (e.g.
-    /// `["exec", "-it", "-u", "vscode", "-w", "/workspaces/proj", "<id>", "bash", "-l"]`).
+    /// Arguments passed before any user input — usually the flags that
+    /// drop the user into an interactive shell at the right place.
     pub args: Vec<String>,
-    /// If true, the inner cwd is already handled by `args` (e.g. via
-    /// `docker exec -w`) and the `TerminalManager` must not call
-    /// `CommandBuilder::cwd()`. For host shells this is false.
+    /// If true, `args` already establishes the working directory and the
+    /// terminal manager must skip `CommandBuilder::cwd()`. For local
+    /// authorities this is false so the host shell honours the per-
+    /// terminal cwd the editor passes in.
     pub manages_cwd: bool,
 }
 
-/// Everything the editor needs to know about the environment it is attached
-/// to. Exactly one is active per workspace.
-#[derive(Clone)]
-pub struct ActiveAuthority {
-    pub filesystem: Arc<dyn FileSystem + Send + Sync>,
-    pub process_spawner: Arc<dyn ProcessSpawner>,
-    /// Optional wrapper for integrated terminal spawns. `None` means spawn
-    /// the host shell directly.
-    pub terminal_wrapper: Option<TerminalWrapper>,
-    /// Text shown in the status bar and file explorer header
-    /// (e.g. `"user@host"`, `"Container:abc123"`). `None` means local.
-    pub display_string: Option<String>,
+impl TerminalWrapper {
+    /// Wrap the detected host shell with no extra args. Cwd is set by
+    /// the terminal manager from the spawn call.
+    pub fn host_shell() -> Self {
+        Self {
+            command: crate::services::terminal::manager::detect_shell(),
+            args: Vec::new(),
+            manages_cwd: false,
+        }
+    }
 }
 
-impl ActiveAuthority {
-    /// Default local authority: host filesystem, host process spawner, no
-    /// terminal wrapper, no display string.
+/// Tagged payload describing how to build an authority from a plugin.
+///
+/// Kept intentionally small and explicit. Adding a new spawner or
+/// filesystem kind means adding a new variant here and a constructor in
+/// `Authority::from_plugin_payload`. Plugins consuming the API see only
+/// the `kind` discriminator and the kind-specific params, so old payloads
+/// keep working as new kinds are added.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthorityPayload {
+    pub filesystem: FilesystemSpec,
+    pub spawner: SpawnerSpec,
+    pub terminal_wrapper: TerminalWrapperSpec,
+    /// Status-bar / explorer label. Empty = no label rendered.
+    #[serde(default)]
+    pub display_label: String,
+}
+
+/// Filesystem kind chosen by a plugin payload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum FilesystemSpec {
+    /// Use the host filesystem. Devcontainers fall here because the
+    /// workspace is mounted into the container, so file paths translate
+    /// 1:1 between host and container.
+    Local,
+}
+
+/// Process-spawner kind chosen by a plugin payload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum SpawnerSpec {
+    /// Spawn on the host. Equivalent to `LocalProcessSpawner`.
+    Local,
+    /// Run via `docker exec` against a long-lived container. The plugin
+    /// manages the container lifecycle (e.g. via `editor.spawnHostProcess`
+    /// to invoke `devcontainer up`) and hands us the container id once it
+    /// is ready.
+    DockerExec {
+        container_id: String,
+        #[serde(default)]
+        user: Option<String>,
+        #[serde(default)]
+        workspace: Option<String>,
+    },
+}
+
+/// Terminal-wrapper kind chosen by a plugin payload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum TerminalWrapperSpec {
+    /// Use the detected host shell.
+    HostShell,
+    /// Use an explicit command + args (e.g. `docker exec -it -u <user>
+    /// -w <workspace> <id> bash -l`). `manages_cwd` defaults to true
+    /// because that is the only sensible choice for re-parented shells.
+    Explicit {
+        command: String,
+        args: Vec<String>,
+        #[serde(default = "default_true")]
+        manages_cwd: bool,
+    },
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// The single backend slot. Replaces the old quartet of `filesystem`,
+/// `process_spawner`, `terminal_wrapper`, and `authority_display_string`
+/// fields on `Editor`. Cloned cheaply via `Arc`s.
+#[derive(Clone)]
+pub struct Authority {
+    pub filesystem: Arc<dyn FileSystem + Send + Sync>,
+    pub process_spawner: Arc<dyn ProcessSpawner>,
+    pub terminal_wrapper: TerminalWrapper,
+    /// Status-bar / file-explorer label. Empty means render nothing.
+    /// SSH leaves this empty and lets the status bar fall back to the
+    /// filesystem's `remote_connection_info()` so disconnect annotations
+    /// stay in one place.
+    pub display_label: String,
+}
+
+impl Authority {
+    /// Default boot-time authority: host filesystem, host process
+    /// spawner, host shell wrapper. The editor starts here on every
+    /// startup; SSH or plugin-installed authorities replace it later.
     pub fn local() -> Self {
         Self {
-            filesystem: Arc::new(crate::model::filesystem::StdFileSystem),
-            process_spawner: Arc::new(crate::services::remote::LocalProcessSpawner),
-            terminal_wrapper: None,
-            display_string: None,
+            filesystem: Arc::new(StdFileSystem),
+            process_spawner: Arc::new(LocalProcessSpawner),
+            terminal_wrapper: TerminalWrapper::host_shell(),
+            display_label: String::new(),
         }
+    }
+
+    /// Build an SSH authority. The caller already holds the connection
+    /// (and its keepalive resources) so we just wire the parts in. Label
+    /// is left empty — the status bar falls back to the filesystem's own
+    /// `remote_connection_info()` which knows how to annotate disconnect.
+    pub fn ssh(
+        filesystem: Arc<dyn FileSystem + Send + Sync>,
+        process_spawner: Arc<dyn ProcessSpawner>,
+    ) -> Self {
+        Self {
+            filesystem,
+            process_spawner,
+            terminal_wrapper: TerminalWrapper::host_shell(),
+            display_label: String::new(),
+        }
+    }
+
+    /// Build an authority from a plugin payload (the data carried by the
+    /// `editor.setAuthority(...)` op). All translation from "kind +
+    /// params" to concrete `Arc<dyn …>` lives here and nowhere else.
+    pub fn from_plugin_payload(payload: AuthorityPayload) -> Result<Self, AuthorityPayloadError> {
+        let filesystem: Arc<dyn FileSystem + Send + Sync> = match payload.filesystem {
+            FilesystemSpec::Local => Arc::new(StdFileSystem),
+        };
+
+        let process_spawner: Arc<dyn ProcessSpawner> = match payload.spawner {
+            SpawnerSpec::Local => Arc::new(LocalProcessSpawner),
+            SpawnerSpec::DockerExec {
+                container_id,
+                user,
+                workspace,
+            } => Arc::new(
+                crate::services::authority::docker_spawner::DockerExecSpawner::new(
+                    container_id,
+                    user,
+                    workspace,
+                ),
+            ),
+        };
+
+        let terminal_wrapper = match payload.terminal_wrapper {
+            TerminalWrapperSpec::HostShell => TerminalWrapper::host_shell(),
+            TerminalWrapperSpec::Explicit {
+                command,
+                args,
+                manages_cwd,
+            } => TerminalWrapper {
+                command,
+                args,
+                manages_cwd,
+            },
+        };
+
+        Ok(Self {
+            filesystem,
+            process_spawner,
+            terminal_wrapper,
+            display_label: payload.display_label,
+        })
+    }
+}
+
+/// Error from translating a plugin payload into a live authority.
+/// Reserved for future kinds that might fail to construct (e.g. invalid
+/// connection parameters); local-only payloads currently never fail.
+#[derive(Debug, thiserror::Error)]
+pub enum AuthorityPayloadError {
+    #[error("invalid authority payload: {0}")]
+    Invalid(String),
+}
+
+mod docker_spawner;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_authority_uses_host_shell_with_no_args() {
+        let auth = Authority::local();
+        assert!(!auth.terminal_wrapper.command.is_empty());
+        assert!(auth.terminal_wrapper.args.is_empty());
+        assert!(!auth.terminal_wrapper.manages_cwd);
+        assert_eq!(auth.display_label, "");
+    }
+
+    #[test]
+    fn from_plugin_payload_local_yields_host_shell() {
+        let payload = AuthorityPayload {
+            filesystem: FilesystemSpec::Local,
+            spawner: SpawnerSpec::Local,
+            terminal_wrapper: TerminalWrapperSpec::HostShell,
+            display_label: String::new(),
+        };
+        let auth = Authority::from_plugin_payload(payload).expect("local payload is valid");
+        assert!(!auth.terminal_wrapper.command.is_empty());
+        assert!(auth.terminal_wrapper.args.is_empty());
+    }
+
+    #[test]
+    fn from_plugin_payload_docker_exec_carries_label() {
+        let payload = AuthorityPayload {
+            filesystem: FilesystemSpec::Local,
+            spawner: SpawnerSpec::DockerExec {
+                container_id: "abc123".into(),
+                user: Some("vscode".into()),
+                workspace: Some("/workspaces/proj".into()),
+            },
+            terminal_wrapper: TerminalWrapperSpec::Explicit {
+                command: "docker".into(),
+                args: vec![
+                    "exec".into(),
+                    "-it".into(),
+                    "-u".into(),
+                    "vscode".into(),
+                    "-w".into(),
+                    "/workspaces/proj".into(),
+                    "abc123".into(),
+                    "bash".into(),
+                    "-l".into(),
+                ],
+                manages_cwd: true,
+            },
+            display_label: "Container:abc123".into(),
+        };
+        let auth = Authority::from_plugin_payload(payload).expect("docker payload is valid");
+        assert_eq!(auth.terminal_wrapper.command, "docker");
+        assert!(auth.terminal_wrapper.manages_cwd);
+        assert_eq!(auth.display_label, "Container:abc123");
     }
 }

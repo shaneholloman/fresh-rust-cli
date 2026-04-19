@@ -518,7 +518,11 @@ impl Editor {
             if let Some(handle) = self.terminal_manager.get(terminal_id) {
                 if let Ok(state) = handle.state.lock() {
                     // Append visible screen to backing file
-                    if let Ok(mut file) = self.filesystem.open_file_for_append(&backing_path) {
+                    if let Ok(mut file) = self
+                        .authority
+                        .filesystem
+                        .open_file_for_append(&backing_path)
+                    {
                         let mut writer = BufWriter::new(&mut *file);
                         if let Err(e) = state.append_visible_screen(&mut writer) {
                             tracing::warn!(
@@ -1181,7 +1185,7 @@ impl Editor {
 
         // Best-effort directory creation for terminal backing files
         #[allow(clippy::let_underscore_must_use)]
-        let _ = self.filesystem.create_dir_all(
+        let _ = self.authority.filesystem.create_dir_all(
             log_path
                 .parent()
                 .or_else(|| backing_path.parent())
@@ -1202,7 +1206,7 @@ impl Editor {
             terminal.cwd.clone(),
             Some(log_path.clone()),
             Some(backing_path.clone()),
-            self.terminal_wrapper.clone(),
+            self.authority.terminal_wrapper.clone(),
         ) {
             Ok(id) => id,
             Err(e) => {
@@ -1253,7 +1257,7 @@ impl Editor {
             large_file_threshold,
             &self.grammar_registry,
             &self.config.languages,
-            std::sync::Arc::clone(&self.filesystem),
+            std::sync::Arc::clone(&self.authority.filesystem),
         ) {
             if let Some(state) = self.buffers.get_mut(&buffer_id) {
                 *state = new_state;

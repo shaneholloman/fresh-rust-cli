@@ -442,55 +442,77 @@ impl Editor {
         self.status_log_path = Some(path);
     }
 
-    /// Set the process spawner for plugin command execution
-    /// Use RemoteProcessSpawner for remote editing, LocalProcessSpawner for local
-    pub fn set_process_spawner(
-        &mut self,
-        spawner: Arc<dyn crate::services::remote::ProcessSpawner>,
-    ) {
-        self.process_spawner = spawner;
+    /// Queue a new authority and restart the editor.
+    ///
+    /// Per the design decision in `docs/internal/AUTHORITY_DESIGN.md`,
+    /// authority transitions piggy-back on the existing
+    /// `change_working_dir` restart path. The caller never sees an
+    /// editor that is half-transitioned: the current `Editor` is
+    /// dropped, `main.rs` rebuilds a fresh one with the queued
+    /// authority, and session restore reopens buffers against the new
+    /// backend. This is slower than an in-place pointer swap but is
+    /// far more robust — every cached `Arc<dyn FileSystem>`, LSP
+    /// handle, terminal PTY, plugin state, and in-flight task is
+    /// dropped cleanly by the existing restart machinery.
+    pub fn install_authority(&mut self, authority: crate::services::authority::Authority) {
+        self.pending_authority = Some(authority);
+        // Re-open the same working directory; `main.rs` picks up the
+        // pending authority from the old editor just before dropping it.
+        self.request_restart(self.working_dir.clone());
     }
 
-    /// Install the authority's terminal wrapper (or clear it).
-    ///
-    /// When set, integrated terminal spawns will be rewritten by this
-    /// wrapper instead of launching the host shell directly.
-    pub fn set_terminal_wrapper(
-        &mut self,
-        wrapper: Option<crate::services::authority::TerminalWrapper>,
-    ) {
-        self.terminal_wrapper = wrapper;
+    /// Restore the default local authority. Same destructive-restart
+    /// semantics as `install_authority` — the caller never observes a
+    /// half-transitioned editor.
+    pub fn clear_authority(&mut self) {
+        self.install_authority(crate::services::authority::Authority::local());
     }
 
-    /// Install the authority-provided status display string.
-    ///
-    /// Shown in the status bar and file explorer when the filesystem itself
-    /// doesn't carry a connection string (non-SSH authorities).
-    pub fn set_authority_display_string(&mut self, s: Option<String>) {
-        self.authority_display_string = s;
+    /// Take the queued authority (if any). Called by `main.rs` on
+    /// restart to move the queued authority into the fresh editor.
+    pub fn take_pending_authority(&mut self) -> Option<crate::services::authority::Authority> {
+        self.pending_authority.take()
+    }
+
+    /// Directly replace the active authority without triggering a
+    /// restart. Intended for the post-construction wiring in `main.rs`
+    /// only, where the editor is still being set up and there is no
+    /// user-visible state to preserve. Do not call this from the event
+    /// loop — use `install_authority` for that.
+    pub fn set_boot_authority(&mut self, authority: crate::services::authority::Authority) {
+        self.authority = authority;
+    }
+
+    /// Read-only access to the active authority.
+    pub fn authority(&self) -> &crate::services::authority::Authority {
+        &self.authority
     }
 
     /// Get remote connection info if editing remote files
     ///
     /// Returns `Some("user@host")` for remote editing, `None` for local.
     pub fn remote_connection_info(&self) -> Option<&str> {
-        self.filesystem.remote_connection_info()
+        self.authority.filesystem.remote_connection_info()
     }
 
     /// Get connection string for display in status bar and file explorer.
     ///
-    /// Returns SSH connection string (from filesystem),
-    /// authority-provided string (e.g. `Container:<id>`), or `None`.
+    /// Per principle 9, identity lives in the authority. The label set
+    /// by whoever constructed the authority wins; if it is empty (the
+    /// SSH constructor leaves it that way) we fall back to the
+    /// filesystem's `remote_connection_info()`, which knows how to
+    /// annotate disconnected SSH sessions.
     pub fn connection_display_string(&self) -> Option<String> {
-        if let Some(conn) = self.remote_connection_info() {
-            Some(if self.filesystem.is_remote_connected() {
+        if !self.authority.display_label.is_empty() {
+            return Some(self.authority.display_label.clone());
+        }
+        self.remote_connection_info().map(|conn| {
+            if self.authority.filesystem.is_remote_connected() {
                 conn.to_string()
             } else {
                 format!("{} (Disconnected)", conn)
-            })
-        } else {
-            self.authority_display_string.clone()
-        }
+            }
+        })
     }
 
     /// Get the status log path

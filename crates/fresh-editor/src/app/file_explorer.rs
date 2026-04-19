@@ -152,10 +152,14 @@ impl Editor {
         // home directory only when working_dir doesn't exist on the remote
         // filesystem (e.g. when no path was provided and working_dir defaulted
         // to the local current directory).
-        let root_path = if self.filesystem.remote_connection_info().is_some()
-            && !self.filesystem.is_dir(&self.working_dir).unwrap_or(false)
+        let root_path = if self.authority.filesystem.remote_connection_info().is_some()
+            && !self
+                .authority
+                .filesystem
+                .is_dir(&self.working_dir)
+                .unwrap_or(false)
         {
-            match self.filesystem.home_dir() {
+            match self.authority.filesystem.home_dir() {
                 Ok(home) => home,
                 Err(e) => {
                     tracing::error!("Failed to get remote home directory: {}", e);
@@ -450,7 +454,11 @@ impl Editor {
 
                     if let Some(runtime) = &self.tokio_runtime {
                         let path_clone = file_path.clone();
-                        let result = self.filesystem.create_file(&path_clone).map(|_| ());
+                        let result = self
+                            .authority
+                            .filesystem
+                            .create_file(&path_clone)
+                            .map(|_| ());
 
                         match result {
                             Ok(_) => {
@@ -506,7 +514,7 @@ impl Editor {
                     if let Some(runtime) = &self.tokio_runtime {
                         let path_clone = dir_path.clone();
                         let dirname_clone = dirname.clone();
-                        let result = self.filesystem.create_dir(&path_clone);
+                        let result = self.authority.filesystem.create_dir(&path_clone);
 
                         match result {
                             Ok(_) => {
@@ -581,7 +589,7 @@ impl Editor {
 
         // For remote files, move to remote trash directory
         // For local files, use system trash
-        let delete_result = if self.filesystem.remote_connection_info().is_some() {
+        let delete_result = if self.authority.filesystem.remote_connection_info().is_some() {
             self.move_to_remote_trash(&path)
         } else {
             trash::delete(&path).map_err(std::io::Error::other)
@@ -641,12 +649,12 @@ impl Editor {
     /// Move a file/directory to the remote trash directory (~/.local/share/fresh/trash/)
     fn move_to_remote_trash(&self, path: &std::path::Path) -> std::io::Result<()> {
         // Get remote home directory
-        let home = self.filesystem.home_dir()?;
+        let home = self.authority.filesystem.home_dir()?;
         let trash_dir = home.join(".local/share/fresh/trash");
 
         // Create trash directory if it doesn't exist
-        if !self.filesystem.exists(&trash_dir) {
-            self.filesystem.create_dir_all(&trash_dir)?;
+        if !self.authority.filesystem.exists(&trash_dir) {
+            self.authority.filesystem.create_dir_all(&trash_dir)?;
         }
 
         // Generate unique name with timestamp to avoid collisions
@@ -661,7 +669,7 @@ impl Editor {
         let trash_path = trash_dir.join(trash_name);
 
         // Move to trash
-        self.filesystem.rename(path, &trash_path)
+        self.authority.filesystem.rename(path, &trash_path)
     }
 
     pub fn file_explorer_rename(&mut self) {
@@ -713,7 +721,7 @@ impl Editor {
             .unwrap_or_else(|| original_path.clone());
 
         if let Some(runtime) = &self.tokio_runtime {
-            let result = self.filesystem.rename(&original_path, &new_path);
+            let result = self.authority.filesystem.rename(&original_path, &new_path);
 
             match result {
                 Ok(_) => {

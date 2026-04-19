@@ -2031,7 +2031,8 @@ impl Editor {
         let cancel = std::sync::atomic::AtomicBool::new(false);
         let mut file_paths: Vec<std::path::PathBuf> = Vec::new();
         if let Err(e) =
-            self.filesystem
+            self.authority
+                .filesystem
                 .walk_files(&cwd, IGNORED_DIRS, &cancel, &mut |path, _rel| {
                     file_paths.push(path.to_path_buf());
                     true
@@ -2081,7 +2082,7 @@ impl Editor {
                 let mut cursor = crate::model::filesystem::FileSearchCursor::new();
                 let mut file_matches = Vec::new();
                 while !cursor.done && file_matches.len() < remaining {
-                    match self.filesystem.search_file(
+                    match self.authority.filesystem.search_file(
                         file_path,
                         &pattern,
                         &fs_opts_file,
@@ -2186,8 +2187,8 @@ impl Editor {
         let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         self.streaming_grep_cancellation = Some(cancel.clone());
 
-        let filesystem = self.filesystem.clone();
-        let filesystem_walker = self.filesystem.clone();
+        let filesystem = self.authority.filesystem.clone();
+        let filesystem_walker = self.authority.filesystem.clone();
         let cwd = self.working_dir.clone();
         let query_len = pattern.len();
 

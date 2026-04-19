@@ -192,7 +192,7 @@ impl Editor {
             self.terminal_width,
             self.terminal_height,
             self.config.editor.large_file_threshold_bytes as usize,
-            std::sync::Arc::clone(&self.filesystem),
+            std::sync::Arc::clone(&self.authority.filesystem),
         );
         state
             .margins
@@ -206,7 +206,7 @@ impl Editor {
             state.buffer = crate::model::buffer::Buffer::from_str(
                 &content,
                 self.config.editor.large_file_threshold_bytes as usize,
-                std::sync::Arc::clone(&self.filesystem),
+                std::sync::Arc::clone(&self.authority.filesystem),
             );
         }
 
@@ -265,7 +265,7 @@ impl Editor {
             self.terminal_width,
             self.terminal_height,
             self.config.editor.large_file_threshold_bytes as usize,
-            std::sync::Arc::clone(&self.filesystem),
+            std::sync::Arc::clone(&self.authority.filesystem),
         );
         state
             .margins
@@ -279,7 +279,7 @@ impl Editor {
             state.buffer = crate::model::buffer::Buffer::from_str(
                 &content,
                 self.config.editor.large_file_threshold_bytes as usize,
-                std::sync::Arc::clone(&self.filesystem),
+                std::sync::Arc::clone(&self.authority.filesystem),
             );
         }
 

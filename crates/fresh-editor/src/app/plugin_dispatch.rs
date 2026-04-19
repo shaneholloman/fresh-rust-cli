@@ -778,7 +778,7 @@ impl Editor {
                             .ok()
                     });
                     let sender = bridge.sender();
-                    let spawner = self.process_spawner.clone();
+                    let spawner = self.authority.process_spawner.clone();
 
                     runtime.spawn(async move {
                         // Receiver may be dropped if editor is shutting down
@@ -1737,7 +1737,7 @@ impl Editor {
 
                 // Prepare persistent storage paths
                 let terminal_root = self.dir_context.terminal_dir_for(&working_dir);
-                if let Err(e) = self.filesystem.create_dir_all(&terminal_root) {
+                if let Err(e) = self.authority.filesystem.create_dir_all(&terminal_root) {
                     tracing::warn!("Failed to create terminal directory: {}", e);
                 }
                 let predicted_terminal_id = self.terminal_manager.next_terminal_id();
@@ -1771,7 +1771,7 @@ impl Editor {
                     Some(working_dir),
                     Some(log_path.clone()),
                     backing_path_for_spawn,
-                    self.terminal_wrapper.clone(),
+                    self.authority.terminal_wrapper.clone(),
                 ) {
                     Ok(terminal_id) => {
                         // Track log file path

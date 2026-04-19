@@ -282,7 +282,11 @@ impl Editor {
     /// Dump the current configuration to the user's config file
     pub fn dump_config(&mut self) {
         // Create the config directory if it doesn't exist
-        if let Err(e) = self.filesystem.create_dir_all(&self.dir_context.config_dir) {
+        if let Err(e) = self
+            .authority
+            .filesystem
+            .create_dir_all(&self.dir_context.config_dir)
+        {
             self.set_status_message(
                 t!("error.config_dir_failed", error = e.to_string()).to_string(),
             );
@@ -330,7 +334,8 @@ impl Editor {
     /// Returns Ok(()) on success, or an error message on failure
     pub fn save_config(&self) -> Result<(), String> {
         // Create the config directory if it doesn't exist
-        self.filesystem
+        self.authority
+            .filesystem
             .create_dir_all(&self.dir_context.config_dir)
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
 

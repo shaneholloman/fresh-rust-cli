@@ -291,7 +291,7 @@ impl Editor {
         self.file_open_state = Some(file_open::FileOpenState::new(
             initial_dir.clone(),
             show_hidden,
-            self.filesystem.clone(),
+            self.authority.filesystem.clone(),
         ));
 
         // Start async directory loading and async shortcuts loading in parallel
@@ -312,7 +312,7 @@ impl Editor {
         self.file_open_state = Some(file_open::FileOpenState::new(
             initial_dir.clone(),
             show_hidden,
-            self.filesystem.clone(),
+            self.authority.filesystem.clone(),
         ));
 
         // Start async directory loading and async shortcuts loading in parallel
@@ -404,7 +404,7 @@ impl Editor {
     /// See issue #903.
     pub(super) fn load_file_open_shortcuts_async(&mut self) {
         if let Some(ref runtime) = self.tokio_runtime {
-            let filesystem = self.filesystem.clone();
+            let filesystem = self.authority.filesystem.clone();
             let sender = self.async_bridge.as_ref().map(|b| b.sender());
 
             runtime.spawn(async move {

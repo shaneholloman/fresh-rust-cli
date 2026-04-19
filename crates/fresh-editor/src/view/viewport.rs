@@ -762,12 +762,30 @@ impl Viewport {
 
         let viewport_height = self.visible_line_count();
         if view_lines.is_empty() || viewport_height == 0 {
+            tracing::trace!(
+                "ensure_visible_in_layout: early-out, view_lines.len={} viewport_height={} cursor_pos={} top_byte={}",
+                view_lines.len(),
+                viewport_height,
+                cursor.position,
+                self.top_byte,
+            );
             self.scrolled_up_in_wrap = false;
             return false;
         }
 
         // Find the cursor's absolute view line position (in the full view_lines array)
         let cursor_view_line = self.find_view_line_for_byte(view_lines, cursor.position);
+
+        tracing::trace!(
+            "ensure_visible_in_layout: enter cursor_pos={} cursor_view_line={} top_view_line_offset={} top_byte={} viewport_height={} view_lines.len={} line_wrap_enabled={}",
+            cursor.position,
+            cursor_view_line,
+            self.top_view_line_offset,
+            self.top_byte,
+            viewport_height,
+            view_lines.len(),
+            self.line_wrap_enabled,
+        );
 
         // Consume the "just scrolled up in wrap mode" signal from the byte-
         // oriented `ensure_visible`.  When set, we pull `top_view_line_offset`
@@ -844,6 +862,17 @@ impl Viewport {
         // the last visible row".
         let in_bottom_margin = cursor_view_line + effective_offset + 1 > effective_bottom;
 
+        tracing::trace!(
+            "ensure_visible_in_layout: margins effective_top={} effective_bottom={} effective_offset={} apply_margin={} in_top_margin={} in_bottom_margin={} max_top={}",
+            effective_top,
+            effective_bottom,
+            effective_offset,
+            apply_margin,
+            in_top_margin,
+            in_bottom_margin,
+            max_top,
+        );
+
         if in_top_margin || in_bottom_margin {
             // Compute the ideal top_view_line_offset that puts the cursor
             // just inside the safe zone (margin away from the nearer edge).
@@ -866,6 +895,18 @@ impl Viewport {
             // that direction (e.g. at the very top or very bottom of the
             // document), keep the viewport put and fall through to the
             // virtual-lines / horizontal-scroll handling below.
+            if new_offset == self.top_view_line_offset {
+                tracing::trace!(
+                    "ensure_visible_in_layout: in margin but clamped — target_top={} max_top={} new_offset={} top_view_line_offset={} cursor_view_line={} in_top_margin={} in_bottom_margin={}",
+                    target_top,
+                    max_top,
+                    new_offset,
+                    self.top_view_line_offset,
+                    cursor_view_line,
+                    in_top_margin,
+                    in_bottom_margin,
+                );
+            }
             if new_offset != self.top_view_line_offset {
                 tracing::trace!(
                     "ensure_visible_in_layout: scrolling from offset {} to {}, cursor_view_line={}, in_top_margin={}, in_bottom_margin={}",

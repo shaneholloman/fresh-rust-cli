@@ -26,6 +26,22 @@ Visual decorations applied to buffer text without modifying content. Overlays ca
 
 Plugins can call `getPluginDir()` to locate their own package directory, useful for finding bundled scripts or local dependencies.
 
+### Authority
+
+"Authority" is the editor's slot for where filesystem, process spawning, and LSP routing are targeted. The same abstraction powers the host, SSH remotes, and devcontainers — the rest of the editor doesn't need to know which one is active. Plugins that want to target the host even while the editor is attached elsewhere can use `editor.setAuthority(...)` / `editor.clearAuthority()`, and `editor.spawnHostProcess(...)` to run a process on the host regardless of the current authority.
+
+### Theme Overrides
+
+`editor.overrideThemeColors({...})` applies an in-memory tweak to the active theme without touching disk — useful for animations (e.g. fading in on startup) or environment-driven highlights from `init.ts`. Call `editor.applyTheme(name)` to drop the overrides and settle back on the saved theme.
+
+### JSONC Parsing
+
+`editor.parseJsonc(text)` parses JSON with comments using the host's parser, so plugin code doesn't need to bundle a JSONC library just to read a user config file.
+
+### Ephemeral Terminals
+
+Terminals created by a plugin now follow the lifetime of the action that spawned them — when the action finishes, the terminal closes cleanly on its own. This is what you want for one-shot commands (a test run, a formatter) where you don't want the tab to linger.
+
 ### Modes
 
 Keybinding contexts that determine how keypresses are interpreted. Each buffer has a mode (e.g., "normal", "insert", "special"). Custom modes can inherit from parents and define buffer-local keybindings. Virtual buffers typically use custom modes.

@@ -58,7 +58,7 @@ Nested objects are **deep-merged** field by field. Each field follows the same "
 The `languages` map uses **deep merging with field-level override**:
 - Entries from all layers are combined (you can add new languages at any layer)
 - For the same language key, individual fields are merged (not replaced entirely)
-- Editor settings like `line_wrap`, `wrap_column`, `page_view`, and `page_width` can be set per-language
+- Editor settings including `line_wrap`, `wrap_column`, `page_view`, and `page_width` can be set per-language — e.g. wrap Markdown at 80 columns while leaving code unwrapped
 
 **Example:** Extending built-in Rust settings in your project:
 ```json
@@ -185,56 +185,23 @@ To add syntax highlighting and LSP support for a new language:
 }
 ```
 
-The `grammar` field accepts a grammar name (case-insensitive). To see all available grammars in your environment — including built-in grammars, user-installed grammars, language packs, bundles, and plugin-registered grammars — run:
+The `grammar` field accepts a short name like `"bash"` or `"rust"` as well as the full display name. To see every grammar available in your environment — including built-in grammars, user-installed grammars, language packs, bundles, and plugin-registered grammars — run:
 
 ```
 fresh --cmd grammar list
 ```
 
-### Set a Fallback Language for Unrecognized Files
+### Set a Default Language for Unrecognized Files
 
-When Fresh opens a file whose type it cannot detect (no matching extension, filename, or glob pattern), it shows it as "Plain Text" with no syntax highlighting. The `fallback` setting lets you assign a default language configuration for these unrecognized files — useful for `.conf`, `.rc`, `.rules`, and other config files that Fresh doesn't recognize.
-
-**In your config file** (`~/.config/fresh/config.json` or `.fresh/config.json`):
+When Fresh opens a file whose type it cannot detect (no matching extension, filename, or glob pattern), it shows it as "Plain Text" with no syntax highlighting. Set `default_language` to the name of any entry in the `languages` map and unrecognized files will use that language's full configuration — useful for `.conf`, `.rc`, `.rules`, and other config files that Fresh doesn't recognize.
 
 ```json
-{
-  "fallback": {
-    "grammar": "bash",
-    "comment_prefix": "#",
-    "auto_indent": true
-  }
-}
+{ "default_language": "bash" }
 ```
 
-This tells Fresh: "When you don't know what language a file is, treat it as bash." The file will get bash syntax highlighting and `#` comments.
+This tells Fresh: "When you don't know what language a file is, treat it as bash." The file picks up bash syntax highlighting, `#` comments, indent rules, and anything else defined for bash in `languages`.
 
-The `fallback` field accepts the same fields as a language entry in the `languages` map. The most important field is `grammar`, which determines the syntax highlighting. Common values:
-
-| Grammar | Good for |
-|---------|----------|
-| `bash` | Shell-like config files (`.conf`, `.rc`, `.rules`, `.env`) |
-| `yaml` | YAML-like config files |
-| `json` | JSON-like config files |
-| `toml` | TOML-like config files |
-
-Other available fields: `comment_prefix`, `auto_indent`, `use_tabs`, `tab_size`, `line_wrap`, `format_on_save`, `formatter`, and more (same as any language config entry).
-
-To see all available grammar names, run:
-
-```
-fresh --cmd grammar list
-```
-
-**In the Settings UI:** Navigate to the `fallback` field under Settings. Replace `null` with a JSON object like `{"grammar": "bash", "comment_prefix": "#"}`.
-
-To disable the fallback (default behavior), set it to `null`:
-
-```json
-{
-  "fallback": null
-}
-```
+Any language name works — try `yaml`, `json`, `toml`, or a custom entry of your own. To disable (the default), leave `default_language` unset.
 
 ### Customize LSP Settings
 
@@ -273,6 +240,14 @@ In the Settings UI, each setting shows where its current value comes from:
 - **(project)** - Set in the Project config
 - **(session)** - Temporary session override
 - *(no indicator)* - Using system default
+
+## Status Bar
+
+The left and right sides of the status bar are configurable through the Settings UI. Each side uses a **DualList** picker: items live in an **Available** column or an **Included** column, and you move them back and forth to show or hide them. Use the arrow buttons next to the Included list to reorder. Elements include the filename, cursor position, encoding, LSP indicator, git branch, warning counts, palette hint, and a `{clock}` element that shows `HH:MM` with a blinking colon.
+
+## Save Behavior
+
+If the target directory doesn't exist when you save a file, Fresh prompts to create it for you instead of failing. This applies to both brand-new files and to saving an existing buffer under a new path.
 
 ## Editor Settings Reference
 

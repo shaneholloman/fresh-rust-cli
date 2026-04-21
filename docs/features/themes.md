@@ -7,6 +7,26 @@ Fresh supports customizable color themes.
 
 Use the command palette (`Ctrl+P`) and search for "Select Theme" to choose from available themes. Built-in themes and user themes are both shown.
 
+## Setting a Theme in `config.json`
+
+The `theme` field in `config.json` accepts several forms, so you can point at a built-in, a local file, or a theme hosted somewhere else:
+
+```json
+{ "theme": "dark" }                              // built-in, by name
+{ "theme": "builtin://dark" }                    // same thing, explicit
+
+{ "theme": "my-theme.json" }                     // relative to ~/.config/fresh/themes
+{ "theme": "subdir/dark.json" }                  // nested is fine
+
+{ "theme": "file://${HOME}/themes/x.json" }      // absolute path; ${HOME} and
+                                                  // ${XDG_CONFIG_HOME} are expanded
+
+{ "theme": "https://github.com/foo/themes#dark" } // URL-packaged theme; fragment
+                                                   // picks one theme from the repo
+```
+
+The relative form is convenient for sharing a Fresh `config.json` in a dotfiles repo alongside the theme files themselves — the path resolves the same way on every machine.
+
 ## Creating and Editing Themes
 
 Fresh includes a visual Theme Editor for creating and customizing themes:

@@ -55,7 +55,7 @@ The current filter state is shown in the header bar.
 
 When adding or editing a binding, a dialog appears with three fields:
 
-1. **Key** — Press the desired key combination. The dialog starts in key recording mode.
+1. **Key** — Press the desired key combination. The dialog starts in key recording mode. To bind a special key like **Esc**, **Tab**, or **Enter**, press **Enter** on the key field first to enter recording, then press the key you want to bind; press **Escape** to cancel recording.
 2. **Action** — Type an action name. An autocomplete popup shows matching actions as you type. Use `↑`/`↓` to navigate suggestions and `Tab` or `Enter` to accept. Only valid action names are accepted.
 3. **Context** — Use `←`/`→` to cycle through available contexts (global, normal, prompt, popup, file\_explorer, menu, terminal).
 

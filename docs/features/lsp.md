@@ -3,10 +3,20 @@
 Fresh has native support for the Language Server Protocol (LSP), providing features like:
 
 *   **Real-time diagnostics:** See errors and warnings in your code as you type.
-*   **Code completion:** Get intelligent code completion suggestions.
-*   **Code actions:** Quick fixes and refactorings (`Alt+.`).
-*   **Go-to-definition:** Quickly jump to the definition of a symbol.
-*   **Formatting:** "Format Buffer" from the command palette uses the configured external formatter, falling back to LSP formatting when none is set.
+*   **Code completion:** Auto-imports are applied when you accept a completion. Fresh also provides [basic buffer-word completions](./editing.md#basic-completions) without an LSP.
+*   **Code actions:** Quick fixes, refactorings, and server-initiated file create/rename/delete, all through a single popup that merges actions from every configured server.
+*   **Go-to-definition, hover, rename, find references**, and **signature help**.
+*   **Formatting:** "Format Buffer" from the command palette uses the configured external formatter, falling back to LSP formatting (including range formatting) when none is set.
+
+All LSP operations are available as palette commands (search for "LSP"). Use the [Keybinding Editor](./keybinding-editor.md) to see or change the keys bound to each one.
+
+## Status Bar
+
+The status bar shows a single `LSP` indicator — colour-coded, with a spinner during startup and indexing. Click it to open a popup with per-server status, live progress, and per-server actions (restart, stop, view log). Servers that are configured but whose binary isn't on `PATH` are flagged so Fresh doesn't quietly spawn failing processes. You can also mute a language from the popup.
+
+## Hover and Diagnostics
+
+Hover popups fuse any overlapping diagnostic with the hover body — severity-coloured and source-tagged (`rustc`, `clippy`, `clangd`, etc.), so you see the error message and the type information together.
 
 ## Diagnostics Panel
 
@@ -25,6 +35,12 @@ When the LSP server provides `foldingRange`, fold indicators appear in the gutte
 ## Multi-Server Support
 
 You can configure multiple LSP servers for the same language (e.g., pylsp + pyright for Python). Configure this in the Settings UI (command palette → "Open Settings" → LSP section).
+
+Each server can opt into or out of specific features using `only_features` / `except_features` — for example, route completions to one server and diagnostics to another. Fresh merges completions from every eligible server and tracks diagnostics per-server. Servers configured for all languages are spawned once per project rather than once per language.
+
+## C/C++ Header Routing
+
+When you open a `.h` file, Fresh routes to the C++ LSP if there's a clear signal in the project (a sibling `.cpp`, `.hpp`, or `.hxx`), and to the C LSP otherwise.
 
 ## Workspace Root Detection
 

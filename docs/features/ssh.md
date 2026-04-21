@@ -36,6 +36,9 @@ fresh ssh://alice@host/home/alice/src/main.rs:42:7
 - File explorer shows remote directory
 - Sudo save support for protected files
 - Status bar shows `[SSH:user@host]` indicator
+- Background auto-reconnect after a dropped connection, with a disconnected indicator in the status bar
+
+Under the hood, attaching to an SSH remote points the editor's filesystem and process [Authority](../plugins/api/) at that host — file I/O, the embedded terminal, spawned LSP servers, and any process Fresh launches all run on the remote.
 
 **Requirements:**
 - SSH access to the remote host

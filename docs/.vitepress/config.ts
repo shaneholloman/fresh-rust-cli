@@ -28,6 +28,7 @@ export default defineConfig({
         text: "Blog",
         link: "/blog/",
         items: [
+          { text: "Fresh 0.2.26", link: "/blog/fresh-0.2.26/" },
           { text: "Fresh 0.2.18", link: "/blog/fresh-0.2.18/" },
           { text: "Fresh 0.2.9", link: "/blog/fresh-0.2.9/" },
           { text: "Fresh 0.2", link: "/blog/fresh-0.2/" },
@@ -51,9 +52,12 @@ export default defineConfig({
           { text: "Search and Replace", link: "/features/search-replace" },
           { text: "Integrated Terminal", link: "/features/terminal" },
           { text: "LSP Integration", link: "/features/lsp" },
+          { text: "Git", link: "/features/git" },
           { text: "Themes", link: "/features/themes" },
           { text: "Encoding", link: "/features/encoding" },
           { text: "Remote Editing (SSH)", link: "/features/ssh" },
+          { text: "Devcontainers", link: "/features/devcontainer" },
+          { text: "Dashboard", link: "/features/dashboard" },
           { text: "Session Persistence", link: "/features/session-persistence" },
           { text: "Keybinding Editor", link: "/features/keybinding-editor" },
         ],
@@ -70,6 +74,7 @@ export default defineConfig({
         text: "Configuration",
         items: [
           { text: "Overview", link: "/configuration/" },
+          { text: "Startup Script (init.ts)", link: "/configuration/init" },
           { text: "Keyboard", link: "/configuration/keyboard" },
         ],
       },

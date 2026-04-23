@@ -1473,3 +1473,60 @@ fn test_rename_directory_updates_buffers_for_files_inside() {
         old_inner
     );
 }
+/// Cutting a file in the explorer and pasting it into another directory
+/// used to leave the buffer backed by the old (now-gone) path. `Ctrl+S`
+/// would recreate the file at its original location, leaving the user
+/// with two copies — the moved one and a resurrected ghost. The buffer's
+/// `file_path()` must track the move so saves land at the new location.
+#[test]
+fn test_cut_paste_move_updates_buffer_file_path() {
+    let mut harness = EditorTestHarness::with_temp_project(120, 40).unwrap();
+    let project_root = harness.project_dir().unwrap();
+    fs::create_dir(project_root.join("dst")).unwrap();
+    fs::write(project_root.join("source.txt"), "content").unwrap();
+
+    // Open source.txt as a permanent tab.
+    harness.editor_mut().focus_file_explorer();
+    harness.wait_for_file_explorer().unwrap();
+    harness.wait_for_file_explorer_item("source.txt").unwrap();
+    harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap(); // dst (dirs first)
+    harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap(); // source.txt
+    harness
+        .send_key(KeyCode::Enter, KeyModifiers::NONE)
+        .unwrap();
+
+    // Back to explorer, cut source.txt, paste into dst/.
+    harness
+        .send_key(KeyCode::Char('e'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.wait_for_file_explorer_item("source.txt").unwrap();
+    harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap(); // dst
+    harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap(); // source.txt
+    harness
+        .send_key(KeyCode::Char('x'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.send_key(KeyCode::Up, KeyModifiers::NONE).unwrap(); // dst
+    harness
+        .send_key(KeyCode::Char('v'), KeyModifiers::CONTROL)
+        .unwrap();
+    harness.render().unwrap();
+
+    // The file was moved on disk.
+    let new_path = project_root.join("dst").join("source.txt");
+    let old_path = project_root.join("source.txt");
+    assert!(new_path.exists(), "file should be at new location");
+    assert!(!old_path.exists(), "file should not be at old location");
+
+    // The buffer for source.txt must now be backed by the new path so
+    // subsequent saves write to the right place.
+    assert!(
+        harness.editor().buffer_id_for_path(&new_path).is_some(),
+        "a buffer should exist at the new path {:?}",
+        new_path
+    );
+    assert!(
+        harness.editor().buffer_id_for_path(&old_path).is_none(),
+        "no buffer should still be backed by the old path {:?}",
+        old_path
+    );
+}

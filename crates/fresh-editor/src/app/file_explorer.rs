@@ -1277,11 +1277,21 @@ impl Editor {
         }
 
         let mut succeeded: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(total);
+        // Clean moves are those that actually relocated the file off of
+        // `src`. Partial moves (copy landed, source delete failed)
+        // appear in `succeeded` so the tree refresh picks up the new
+        // dst, but are intentionally NOT in `clean_moves`: their
+        // sources still exist, so open buffers for them should keep
+        // pointing at `src`, not follow the copy.
+        let mut clean_moves: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(total);
         let mut first_error: Option<std::io::Error> = None;
         let mut partial_moves: Vec<(PathBuf, std::io::Error)> = Vec::new();
         for (src, dst) in safe.into_iter().chain(to_overwrite) {
             match self.paste_one_fs_op(&src, &dst, is_cut) {
-                PasteOpOutcome::Ok => succeeded.push((src, dst)),
+                PasteOpOutcome::Ok => {
+                    clean_moves.push((src.clone(), dst.clone()));
+                    succeeded.push((src, dst));
+                }
                 PasteOpOutcome::SourceRemovalFailed {
                     dst: landed_dst,
                     err,
@@ -1297,6 +1307,17 @@ impl Editor {
                         first_error = Some(e);
                     }
                 }
+            }
+        }
+
+        // For cut (move), re-point any open buffer whose file was
+        // among the clean moves to its new on-disk home. Without this,
+        // saving such a buffer would recreate the file at its old
+        // source path. Copies don't need this — they create a new
+        // file at dst without disturbing the source buffer.
+        if is_cut {
+            for (src, dst) in &clean_moves {
+                self.relocate_buffers_for_rename(src, dst);
             }
         }
 
@@ -1513,6 +1534,15 @@ impl Editor {
 
         match self.paste_one_fs_op(&src, &dst, is_cut) {
             PasteOpOutcome::Ok => {
+                // For cut (move), re-point any open buffer at src to
+                // its new home at dst — before the tree refresh, since
+                // the refresh re-resolves the cursor by path and we
+                // want the buffer state consistent with the tree at
+                // all observation points. A pure copy doesn't disturb
+                // source buffers.
+                if is_cut {
+                    self.relocate_buffers_for_rename(&src, &dst);
+                }
                 self.refresh_tree_after_paste(&src, &dst, is_cut);
                 if is_cut {
                     self.file_explorer_clipboard = None;

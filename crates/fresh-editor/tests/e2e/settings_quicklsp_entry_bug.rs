@@ -81,30 +81,11 @@ fn quicklsp_entry_save_preserves_outer_map_key() {
         .unwrap();
     harness.render().unwrap();
 
-    // Navigate down through the universal_lsp map entries until the
-    // quicklsp entry is focused (marked by the "[Enter to edit]" hint).
-    let mut found_quicklsp = false;
-    for _ in 0..30 {
-        let screen = harness.screen_to_string();
-        for line in screen.lines() {
-            if line.contains("quicklsp") && line.contains("[Enter to edit]") {
-                found_quicklsp = true;
-                break;
-            }
-        }
-        if found_quicklsp {
-            break;
-        }
-        harness.send_key(KeyCode::Down, KeyModifiers::NONE).unwrap();
-        harness.render().unwrap();
-    }
-    assert!(
-        found_quicklsp,
-        "Could not focus the universal_lsp → quicklsp entry. Screen:\n{}",
-        harness.screen_to_string()
-    );
-
-    // Press Enter to open the outer Edit Value dialog for quicklsp.
+    // The search jump lands focus directly on the quicklsp entry inside the
+    // universal_lsp map (DeepMatch::MapKey). Pressing Enter must open the
+    // Edit Value dialog for THAT entry — the dialog title and key are the
+    // rendered evidence that focus landed on the right row, so we don't
+    // need to scan for a layout-sensitive "[Enter to edit]" hint first.
     harness
         .send_key(KeyCode::Enter, KeyModifiers::NONE)
         .unwrap();

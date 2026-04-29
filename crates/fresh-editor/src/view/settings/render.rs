@@ -588,25 +588,12 @@ fn render_settings_panel(
         None => return,
     };
 
-    // Render page description (the page name itself is shown in the sidebar
-    // and is typically restated in the description, so we omit it here).
+    // Page description suppressed: it duplicated the category name visible
+    // in the sidebar and pushed the actual settings down without adding
+    // information. The category names + section headers carry enough
+    // context.
     let mut y = area.y;
     let header_start_y = y;
-
-    // Page description (supports multi-line descriptions separated by \n)
-    if let Some(ref desc) = page.description {
-        let desc_style = Style::default().fg(theme.line_number_fg);
-        let lines: Vec<Line> = desc
-            .lines()
-            .map(|line| Line::from(Span::styled(line, desc_style)))
-            .collect();
-        let line_count = lines.len() as u16;
-        frame.render_widget(
-            Paragraph::new(lines),
-            Rect::new(area.x, y, area.width, line_count),
-        );
-        y += line_count;
-    }
 
     // "Clear" button for nullable categories (e.g., Option<LanguageConfig>)
     if page.nullable && state.current_category_has_values() {

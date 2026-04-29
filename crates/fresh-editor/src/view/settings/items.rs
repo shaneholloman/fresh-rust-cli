@@ -641,10 +641,14 @@ impl ScrollItem for SettingItem {
     }
 
     fn focus_regions(&self, width: u16) -> Vec<FocusRegion> {
-        // Sub-region offsets are absolute within the item: callers add them to
-        // the cumulative item-y, so anything above the control row (section
-        // header, top border) has to be included or the scroll target lands
-        // on chrome instead of content.
+        // y_offset is ABSOLUTE within the item — `ScrollablePanel` adds it
+        // to the cumulative item-y to compute a screen y for
+        // `ensure_visible`. Since the item now starts with a section header
+        // and/or a card top border above the control row, y=0 of the
+        // control is `plan.control_y()` rows down from the item top. Using
+        // 0 here scrolls the viewport to the chrome, not to the actual
+        // entry, which is exactly the bug that hid the focused map entry
+        // off-screen on search-jump.
         let plan = self.layout_box(width, &self.style);
         let label_y = plan.control_y();
 

@@ -172,7 +172,8 @@ fn metatheorem_layout_wrong_top_byte_panics() {
         width: 80,
         height: 24,
         actions: vec![],
-        expected_top_byte: 999_999,
+        expected_top_byte: Some(999_999),
+        ..Default::default()
     });
 }
 
@@ -271,7 +272,8 @@ fn metatheorem_check_returns_typed_layout_failure() {
         width: 80,
         height: 24,
         actions: vec![],
-        expected_top_byte: 999,
+        expected_top_byte: Some(999),
+        ..Default::default()
     });
     assert!(matches!(
         result,

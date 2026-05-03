@@ -59,6 +59,27 @@ pub enum ScenarioFailure {
         expected: usize,
         actual: usize,
     },
+    SnapshotFieldMismatch {
+        description: String,
+        field: String,
+        expected: String,
+        actual: String,
+    },
+    ModalStateMismatch {
+        description: String,
+        expected: String,
+        actual: String,
+    },
+    WorkspaceStateMismatch {
+        description: String,
+        field: String,
+        expected: String,
+        actual: String,
+    },
+    InputProjectionFailed {
+        description: String,
+        reason: String,
+    },
     ShadowDisagreement {
         description: String,
         shadow: String,
@@ -136,6 +157,39 @@ impl std::fmt::Display for ScenarioFailure {
             } => write!(
                 f,
                 "[{description}] viewport_top_byte mismatch: expected {expected}, got {actual}",
+            ),
+            ScenarioFailure::SnapshotFieldMismatch {
+                description,
+                field,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "[{description}] render snapshot field {field} mismatch\n   expected = {expected}\n   actual   = {actual}",
+            ),
+            ScenarioFailure::ModalStateMismatch {
+                description,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "[{description}] modal state mismatch\n   expected = {expected}\n   actual   = {actual}",
+            ),
+            ScenarioFailure::WorkspaceStateMismatch {
+                description,
+                field,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "[{description}] workspace {field} mismatch\n   expected = {expected}\n   actual   = {actual}",
+            ),
+            ScenarioFailure::InputProjectionFailed {
+                description,
+                reason,
+            } => write!(
+                f,
+                "[{description}] input projection failed: {reason}",
             ),
             ScenarioFailure::ShadowDisagreement {
                 description,

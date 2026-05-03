@@ -9,13 +9,43 @@
 //! `crossterm::KeyCode`, no screen scraping.
 //!
 //! Three drivers consume the same scenario value: the regression
-//! runner ([`buffer_scenario::assert_buffer_scenario`]), proptest
-//! generators ([`property`]), and shadow-model differentials
-//! ([`shadow`]).
+//! runner (per-type `assert_*_scenario`), proptest generators
+//! ([`property`]), and shadow-model differentials ([`shadow`]).
 
+// ── Phase 1 (landed): pure-state scenarios ──────────────────────────
 pub mod buffer_scenario;
 pub mod failure;
-pub mod layout_scenario;
 pub mod property;
 pub mod shadow;
 pub mod trace_scenario;
+
+// ── Composable architecture (this PR) ───────────────────────────────
+pub mod context;
+pub mod input_event;
+pub mod observable;
+
+// ── Phase 2: Layout (real, naive wrap shadow) ───────────────────────
+pub mod layout_scenario;
+pub mod layout_shadow;
+pub mod render_snapshot;
+
+// ── Phase 3: Modal (real-minimal, popup-based) ──────────────────────
+pub mod modal_scenario;
+
+// ── Phase 7: Workspace (real-minimal, multi-buffer) ─────────────────
+pub mod workspace_scenario;
+
+// ── Phase 9: Input (real-minimal, mouse projection) ─────────────────
+pub mod input_scenario;
+
+// ── Phase 10: Temporal (real, MockClock injection) ──────────────────
+pub mod temporal_scenario;
+
+// ── Skeleton phases — types + JSON shape, runners panic with the
+// concrete production hook the phase still needs.
+pub mod gui_scenario;
+pub mod lsp_scenario;
+pub mod persistence_scenario;
+pub mod plugin_scenario;
+pub mod style_scenario;
+pub mod terminal_io_scenario;

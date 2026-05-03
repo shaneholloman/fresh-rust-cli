@@ -36,7 +36,7 @@ pub use crate::input::keybindings::Action;
 /// `deselect_on_move`, and `block_anchor` are intentionally hidden — if a
 /// test needs them, the right fix is to extend this projection (with
 /// review) rather than reach past it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Caret {
     /// Byte offset where edits happen.
     pub position: usize,
@@ -129,6 +129,28 @@ pub trait EditorTestApi {
     /// reconciliation point.
     fn viewport_top_byte(&self) -> usize;
 
+    /// Width of the active terminal in cells, as set at harness
+    /// construction or via resize.
+    fn terminal_width(&self) -> u16;
+
+    /// Height of the active terminal in cells.
+    fn terminal_height(&self) -> u16;
+
+    /// Width of the line-number gutter in cells, computed from the
+    /// active buffer's line count. Includes the trailing separator
+    /// if the renderer adds one.
+    fn gutter_width(&self) -> u16;
+
+    /// Screen cell of the primary cursor, in `(col, row)`. None ⇒
+    /// the cursor is off-screen (scrolled past). Requires a prior
+    /// render to be meaningful.
+    fn hardware_cursor_position(&mut self) -> Option<(u16, u16)>;
+
+    /// `(start_byte, end_byte)` of the currently-visible buffer
+    /// region. End is exclusive. None ⇒ unknown / not yet
+    /// reconciled.
+    fn visible_byte_range(&self) -> Option<(usize, usize)>;
+
     /// `true` if the active buffer has unsaved changes since it was
     /// last loaded from / saved to disk. The "save point" is the
     /// commit in the undo/redo log at which the buffer's on-disk
@@ -214,6 +236,47 @@ impl EditorTestApi for crate::app::Editor {
 
     fn viewport_top_byte(&self) -> usize {
         self.active_viewport().top_byte
+    }
+
+    fn terminal_width(&self) -> u16 {
+        self.active_viewport().width
+    }
+
+    fn terminal_height(&self) -> u16 {
+        self.active_viewport().height
+    }
+
+    fn gutter_width(&self) -> u16 {
+        let buffer = &self.active_state().buffer;
+        u16::try_from(self.active_viewport().gutter_width(buffer)).unwrap_or(u16::MAX)
+    }
+
+    fn hardware_cursor_position(&mut self) -> Option<(u16, u16)> {
+        // The viewport's `cursor_screen_position` requires
+        // `&mut Buffer`. Cloning the viewport (cheap; mostly
+        // primitives) lets us drop the immutable viewport borrow
+        // before taking the mutable buffer borrow on the next
+        // accessor call.
+        let cursor = *self.active_cursors().primary();
+        let viewport = self.active_viewport().clone();
+        let viewport_height = viewport.height;
+        let viewport_width = viewport.width;
+        let buffer = &mut self.active_state_mut().buffer;
+        let (col, row) = viewport.cursor_screen_position(buffer, &cursor);
+        if row >= viewport_height || col >= viewport_width {
+            None
+        } else {
+            Some((col, row))
+        }
+    }
+
+    fn visible_byte_range(&self) -> Option<(usize, usize)> {
+        // Viewport tracks `top_byte` exactly but the bottom of the
+        // visible region depends on the wrapped view-line layout,
+        // which only the renderer knows. Today we conservatively
+        // return None until a future expansion plumbs the
+        // last-visible byte through the test API.
+        None
     }
 
     fn is_modified(&self) -> bool {

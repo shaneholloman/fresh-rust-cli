@@ -26,7 +26,8 @@ fn theorem_freshly_loaded_buffer_has_top_byte_zero() {
         width: 80,
         height: 24,
         actions: vec![],
-        expected_top_byte: 0,
+        expected_top_byte: Some(0),
+        ..Default::default()
     });
 }
 
@@ -46,6 +47,7 @@ fn theorem_move_document_start_resets_viewport() {
         width: 40,
         height: 10,
         actions: vec![Action::MoveDocumentEnd, Action::MoveDocumentStart],
-        expected_top_byte: 0,
+        expected_top_byte: Some(0),
+        ..Default::default()
     });
 }

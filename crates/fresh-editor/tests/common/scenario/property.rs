@@ -24,7 +24,7 @@ use proptest::prelude::*;
 /// scenarios into this and assert invariants on it.
 ///
 /// [`ShadowModel`]: crate::common::scenario::shadow::ShadowModel
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct BufferState {
     pub buffer_text: String,
     pub primary: Caret,

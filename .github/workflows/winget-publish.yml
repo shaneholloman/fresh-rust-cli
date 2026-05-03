@@ -34,8 +34,9 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Configure gh to use PAT for git auth
-        run: gh auth setup-git
+      - name: Configure git credentials for github.com
+        run: |
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
 
       - name: Publish to winget-pkgs
         run: ./scripts/winget-publish.py "${VERSION}"

@@ -1,5 +1,81 @@
 # Release Notes
 
+## 0.3.3
+
+### Features
+
+* **Live Grep floating overlay + Utility Dock** (#1796): Live Grep now opens as a centered floating overlay with results on the left and a real-buffer file preview on the right (full syntax highlighting, gutter, soft-wrap). `Esc` returns you to your prior layout exactly. **Resume** (`Alt+r`) reopens the last query with cached results. **Export to Quickfix** (`Alt+M`) sends results into a dockable list. New **Utility Dock** at the workspace root hosts the terminal (`` Alt+` ``), Quickfix, Diagnostics, and Find References — they share one pane spanning the full width instead of nesting under whichever split was focused.
+
+* **Pluggable Live Grep providers**: Built-in chain is now ripgrep → **git-grep (default in repos)** → grep, with `ag` / `ack` / `fff` available via plugin registration. `Alt+P` cycles to the next available provider; the active one shows in the overlay's title bar. Plugins can register custom backends via `editor.getPluginApi("live-grep")`.
+
+* **Settings tree-view**: The left category list is now an expandable tree — categories with multiple sections show chevrons, expanding reveals jumpable section rows, and the tree cursor follows scrolling so you can see where you are in the body. Section jumps snap to the top of the section. Toggle controls render as a chip-style `[ ✓ ACTIVE ]` indicator.
+
+* **HDL language support** (#1528): Syntax highlighting for **Verilog** (`.v` left mapped to vlang for compatibility, `.vh`/`.verilog`), **SystemVerilog** (`.sv`/`.svh`/`.svi`/`.svp`), and **VHDL** (`.vhd`/`.vhdl`/`.vho`). `svls` wired as the default LSP for Verilog/SystemVerilog (opt-in per project).
+
+* **New `terminal` built-in theme** (#1457): Colors come from your terminal's own palette instead of hard-coded RGB — backgrounds use `Default` so transparency and your terminal's background show through; accents use ANSI named colors that remap to whatever your terminal colorscheme defines. Selection uses reverse-video so it inverts whatever colors are already on screen.
+
+* **Theme inheritance with `extends`**: User themes can now `extends: "builtin://light"` (or `dark` / `high-contrast` / `nostalgia` / `terminal`) and layer overrides on top — the same model VSCode/Helix/Sublime/Zed use. With no `extends`, an explicit `editor.bg` triggers luminance-based auto-inference (bright bg → light base, dim → dark), so partial light themes no longer end up with dark UI chrome (#1281).
+
+* **File explorer context-menu additions** (#1576): **Duplicate** (creates `name copy[.ext]` next to the source, multi-select supported), **Copy Full Path** and **Copy Relative Path** (newline-joined for multi-select). The new entries don't appear on the project root.
+
+* **Distribute clipboard across cursors** (#1057): With N cursors and an N-line clipboard, paste now gives each cursor one line in top-to-bottom order — VSCode / Notepad++ "column-mode paste" semantics. A block-selected copy/paste round-trip preserves its rectangular shape. Behavior is unchanged when counts don't match.
+
+* **Discard option in quit prompt** (#1839): With `hot_exit` on (the default), the unsaved-changes prompt now offers "(d)iscard and quit" so accidental edits no longer require disabling hot_exit globally to throw away. Picking "save" on quit also chains a Save As prompt for each dirty unnamed buffer instead of silently dropping it.
+
+* **Project name in window title** (#1793): Title is now `<file> — <project> — Fresh` so multiple Fresh sessions in different projects are distinguishable in your taskbar/window list.
+
+* **Cursor-jump animation toggle**: New `editor.cursor_jump_animation` setting lets you keep ambient animations (tab slides, dashboard) while disabling just the cursor-jump trail. The master `editor.animations` setting still wins.
+
+### Improvements
+
+* **Search & Replace across project no longer hangs on large binary files** (#1342): Hardcoded extension fast-path skips known-binary files (compiled artifacts, archives, media, ML weights, fonts) before any I/O. Per-file size cap and stronger header sniff (PNG, ZIP-based archives like `.pth`, ELF) catch the formats whose first bytes can look text-like.
+
+* **POSIX ACL writability**: A file granted write access via `setfacl -m u:NAME:rw` is no longer reported read-only — Fresh now asks the kernel via `faccessat(W_OK)` instead of walking inode mode bits, so ACLs, capabilities, and read-only mounts are all honored.
+
+* **LSP status popup is now click-only**: Auto-popping on first file open stole focus and swallowed keystrokes for users who hadn't asked to enable LSP. The `LSP` indicator is now a manual click target; its `Off` state (configured but not running) is rendered with a more prominent attention-grabbing color so discoverability isn't lost.
+
+* **Hover popup no longer flickers on mouse moves** inside the editor (gutter, end-of-line, between words). It only dismisses when the mouse leaves the editor area entirely. New hover responses replace the existing popup instead of stacking.
+
+* **Multi-cursor `Ctrl-D` after substring search** (#1697): When the cursor is inside an active search match, "Add cursor at next match" selects the next *search match* instead of expanding to the surrounding word.
+
+* **JavaScript syntax highlighting** (#899): Routed through tree-sitter, so template literals containing arrow functions or `${expr}` no longer leak `@string` styling across the rest of the file.
+
+* **Smarter auto-indent for Lua / Ruby / Bash / Pascal**: Tree-sitter `indents.scm` is now the single source of truth for keyword-delimited languages, so `(` opening a function call no longer gets treated as a block-opening delimiter.
+
+* **Enter at column 0 doesn't push the line right anymore** (#1425): Auto-indent now detects "cursor at column 0 of a non-empty line" and inserts a bare newline. Closing-delimiter lines still get the established indent-before-close behavior.
+
+* **Live Diff virtual lines soft-wrap** instead of being truncated at the right edge.
+
+* **Per-workspace hot-exit recovery** (#1550): Standalone-mode recovery files are now scoped per working directory. Quitting Fresh in folder B no longer wipes folder A's recovered unnamed-buffer state.
+
+* **Terminal PTY resyncs on tab reveal** (#1795): Resizing the host while a terminal was hidden behind another tab now correctly forwards `SIGWINCH` when you switch back — `$COLUMNS` / `stty size` stay accurate.
+
+* **Open File dialog scrolls correctly on small terminals** (#245): Selection no longer slides past the bottom of the visible list.
+
+* **Keybinding editor scrollbar responds to mouse** (#1593): Click and drag both work; wheel scrolls the viewport instead of moving the selection (so a scrollbar drag isn't undone by the next wheel tick).
+
+* **Settings Number controls** (e.g. Tab Size): Tab now commits and exits the input; clicking the value cell enters edit mode (matches Enter).
+
+* **Plugin keybinding labels refresh on every prompt open** so plugins surfacing key hints ("`Alt+P` to cycle", overlay headers, etc.) reflect mid-session rebinds without restart.
+
+* **New plugin hook `after_file_explorer_change`** fires on FS-mutating explorer actions (Duplicate, Paste, New File, Rename, Delete) so plugins like git_explorer can refresh badges immediately.
+
+### Bug Fixes
+
+* **Crash fixes**: `Option::unwrap()` panic when pasting in the Theme Editor (event apply used the wrong split). `DeleteBackward` panics on stale cursor state in vi-mode count prefixes and plugin action batches. Theme editor crash on the new `terminal` theme's modifier fields. Embedded-plugin extraction race across concurrent test processes.
+
+* **Search**: `Find Selection Next/Previous` on a non-word character (e.g. `}` after goto-matching-bracket) no longer hijacks the search query — it now navigates the existing search instead.
+
+* **OpenLine (Emacs `C-o`)**: Cursor stays on the original line instead of advancing — was previously indistinguishable from Enter.
+
+* **Markdown compose** (#1789, #1790): Wrap budget widened by one column to prevent orphan-word re-wrapping on Windows; current-line highlight now extends across soft-wrapped sub-rows.
+
+* **Viewport** (#1794): Popup anchoring counts true visual rows under wrap, so completion popups appear next to the cursor instead of several rows above in heavily-wrapped buffers.
+
+### Under the Hood
+
+* **Build performance**: `oxc` and `rquickjs` now build at `opt-level=3` in dev/test profiles to keep iteration fast despite their size.
+
 ## 0.3.2
 
 ### Features

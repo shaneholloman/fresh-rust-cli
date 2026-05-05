@@ -4,9 +4,11 @@
 
 ### Features
 
-* **Live Grep floating overlay + Utility Dock** (#1796): Live Grep now opens as a centered floating overlay with results on the left and a real-buffer file preview on the right (full syntax highlighting, gutter, soft-wrap). `Esc` returns you to your prior layout exactly. **Resume** (`Alt+r`) reopens the last query with cached results. **Export to Quickfix** (`Alt+M`) sends results into a dockable list. New **Utility Dock** at the workspace root hosts the terminal (`` Alt+` ``), Quickfix, Diagnostics, and Find References — they share one pane spanning the full width instead of nesting under whichever split was focused.
+* **Live Grep floating overlay + Utility Dock** (#1796): Live Grep now opens as a centered floating overlay with results on the left and a real-buffer file preview on the right (full syntax highlighting, gutter, soft-wrap). `Esc` returns you to your prior layout exactly. **Resume** (`Alt+r`) reopens the last query with cached results. **Export to Quickfix** (`Alt+M`) sends results into a dockable list.
 
-* **Pluggable Live Grep providers**: Built-in chain is now ripgrep → **git-grep (default in repos)** → grep, with `ag` / `ack` / `fff` available via plugin registration. `Alt+P` cycles to the next available provider; the active one shows in the overlay's title bar. Plugins can register custom backends via `editor.getPluginApi("live-grep")`.
+* New **Utility Dock** at the workspace root hosts the terminal (`` Alt+` ``), Quickfix, Diagnostics, and Find References — they share one pane spanning the full width instead of nesting under whichever split was focused.
+
+* **Pluggable Live Grep providers**: Built-in chain is now ripgrep → **git-grep (default in repos)** → grep, with `ag` / `ack` available via plugin registration. `Alt+P` cycles to the next available provider; the active one shows in the overlay's title bar. Plugins can register custom backends via `editor.getPluginApi("live-grep")`.
 
 * **Settings tree-view**: The left category list is now an expandable tree — categories with multiple sections show chevrons, expanding reveals jumpable section rows, and the tree cursor follows scrolling so you can see where you are in the body. Section jumps snap to the top of the section. Toggle controls render as a chip-style `[ ✓ ACTIVE ]` indicator.
 

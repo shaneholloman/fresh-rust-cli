@@ -62,6 +62,8 @@
 
 * **New plugin hook `after_file_explorer_change`** fires on FS-mutating explorer actions (Duplicate, Paste, New File, Rename, Delete) so plugins like git_explorer can refresh badges immediately.
 
+* **Theme picker consistency**: The Theme Editor plugin's picker now shows the same set of themes as the native `Select Theme` prompt — no more divergence from a separate `cwd/themes` scan or normalization mismatches. New plugin API `editor.getAllThemes()` returns the cached map directly so plugins can drop their own filesystem walks.
+
 ### Bug Fixes
 
 * **Crash fixes**: `Option::unwrap()` panic when pasting in the Theme Editor (event apply used the wrong split). `DeleteBackward` panics on stale cursor state in vi-mode count prefixes and plugin action batches. Theme editor crash on the new `terminal` theme's modifier fields. Embedded-plugin extraction race across concurrent test processes.
@@ -76,7 +78,11 @@
 
 ### Under the Hood
 
+* **Smaller release binaries**: New `dist` cargo profile (`strip=true`, `lto=fat`, `codegen-units=1`, `opt-level=z`) is now applied to release builds. Binary shrinks from 62.4 MB → ~46 MB (-26%). Backtraces are still included in panics.
+
 * **Build performance**: `oxc` and `rquickjs` now build at `opt-level=3` in dev/test profiles to keep iteration fast despite their size.
+
+* **Semantic test framework + ~250 migrated cases**: A new "scenario" test layer dispatches `Action`s straight against an isolated editor instance, skipping plugin loading where the assertion surface (buffer text + caret) can't observe it — about 440 ms saved per test harness. ~250 e2e claims have been migrated across multicursor, block selection, auto-indent, paste, undo/redo, search-modal flows, multibyte handling, and many regression repros (issues #191, #1147, #1305, #1574, #1697, etc.). Property-based theorems over generated action sequences caught two real production crashes in no-render dispatch paths (vi-mode count prefixes, plugin action batches) — both fixed in this release. A pre-existing race in concurrent embedded-plugin extraction (could leave half-written plugins for parallel test processes) is also fixed.
 
 ## 0.3.2
 

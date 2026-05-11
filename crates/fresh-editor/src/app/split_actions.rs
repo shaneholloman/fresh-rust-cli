@@ -330,7 +330,7 @@ impl Editor {
             let percent = (delta * 100.0) as i32;
             self.set_status_message(t!("split.size_adjusted", percent = percent).to_string());
             // Resize visible terminals to match new split dimensions
-            self.resize_visible_terminals();
+            self.active_window_mut().resize_visible_terminals();
         }
     }
 
@@ -350,7 +350,7 @@ impl Editor {
                     self.set_status_message(t!("split.restored").to_string());
                 }
                 // Resize visible terminals to match new split dimensions
-                self.resize_visible_terminals();
+                self.active_window_mut().resize_visible_terminals();
             }
             Err(e) => self.set_status_message(e),
         }

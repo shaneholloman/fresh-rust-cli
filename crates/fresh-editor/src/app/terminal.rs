@@ -169,7 +169,7 @@ impl Editor {
         self.active_window_mut().key_context = crate::input::keybindings::KeyContext::Terminal;
 
         // Resize terminal to match actual split content area
-        self.resize_visible_terminals();
+        self.active_window_mut().resize_visible_terminals();
 
         // Get the terminal escape keybinding dynamically
         let exit_key = self
@@ -509,20 +509,6 @@ impl Editor {
         (cols, rows)
     }
 
-    /// Resize a terminal buffer's PTY in the active window.
-    pub fn resize_terminal(&mut self, buffer_id: BufferId, cols: u16, rows: u16) {
-        self.active_window_mut()
-            .resize_terminal(buffer_id, cols, rows);
-    }
-
-    /// Resize the active window's visible terminal PTYs to match their
-    /// current split dimensions. Thin shim over
-    /// [`Window::resize_visible_terminals`] — call this from `impl Editor`
-    /// contexts; per-window callers should use the `Window` method directly.
-    pub fn resize_visible_terminals(&mut self) {
-        self.active_window_mut().resize_visible_terminals();
-    }
-
     /// Handle terminal input when in terminal mode
     pub fn handle_terminal_key(
         &mut self,
@@ -722,7 +708,7 @@ impl Editor {
             }
 
             // Ensure terminal PTY is sized correctly for current split dimensions
-            self.resize_visible_terminals();
+            self.active_window_mut().resize_visible_terminals();
 
             self.set_status_message(t!("status.terminal_mode_enabled").to_string());
         }

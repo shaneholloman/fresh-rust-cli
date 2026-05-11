@@ -3149,7 +3149,7 @@ impl Editor {
                 };
 
                 // Resize terminal to match actual split content area
-                self.resize_visible_terminals();
+                self.active_window_mut().resize_visible_terminals();
 
                 // Resolve the callback with TerminalResult
                 let result = fresh_core::api::TerminalResult {

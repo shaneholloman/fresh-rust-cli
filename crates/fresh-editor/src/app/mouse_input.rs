@@ -198,7 +198,7 @@ impl Editor {
 
                 // If we finished dragging a separator, resize visible terminals
                 if was_dragging_separator {
-                    self.resize_visible_terminals();
+                    self.active_window_mut().resize_visible_terminals();
                 }
 
                 needs_render = true;

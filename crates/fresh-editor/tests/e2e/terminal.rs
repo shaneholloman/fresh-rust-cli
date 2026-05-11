@@ -445,7 +445,10 @@ fn test_terminal_resize() {
     let (initial_cols, initial_rows) = handle.size();
 
     // Resize the terminal
-    harness.editor_mut().resize_terminal(buffer_id, 120, 40);
+    harness
+        .editor_mut()
+        .active_window_mut()
+        .resize_terminal(buffer_id, 120, 40);
 
     // Get new size
     let handle = harness

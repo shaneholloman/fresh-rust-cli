@@ -119,7 +119,7 @@ impl Editor {
         // dimensions when the user switches back. Re-running the visible
         // resize here picks up the now-revealed terminal. Issue #1795.
         if self.active_window().is_terminal_buffer(buffer_id) {
-            self.resize_visible_terminals();
+            self.active_window_mut().resize_visible_terminals();
         }
 
         // Ensure the newly active tab is visible

@@ -1379,7 +1379,7 @@ impl Editor {
                             self.active_window_mut().terminal_mode = true;
                             self.active_window_mut().key_context =
                                 crate::input::keybindings::KeyContext::Terminal;
-                            self.resize_visible_terminals();
+                            self.active_window_mut().resize_visible_terminals();
                             let exit_key = self
                                 .keybindings
                                 .read()

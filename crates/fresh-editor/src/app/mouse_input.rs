@@ -1651,7 +1651,8 @@ impl Editor {
     }
 
     fn handle_click_global_popups(&mut self, col: u16, row: u16) -> Option<AnyhowResult<()>> {
-        for (popup_idx, popup_rect, inner_rect, scroll_offset, num_items) in self.active_chrome()
+        for (popup_idx, popup_rect, inner_rect, scroll_offset, num_items) in self
+            .active_chrome()
             .global_popup_areas
             .clone()
             .into_iter()
@@ -1770,7 +1771,8 @@ impl Editor {
     fn handle_click_menu_bar(&mut self, col: u16, row: u16) -> Option<AnyhowResult<()>> {
         if self.active_window_mut().menu_bar_visible {
             // Resolve the hit before any &mut operations to avoid borrow conflicts.
-            let hit = self.active_chrome()
+            let hit = self
+                .active_chrome()
                 .menu_layout
                 .as_ref()
                 .and_then(|ml| ml.menu_at(col, row));
@@ -2377,7 +2379,8 @@ impl Editor {
         // If selecting text in popup, extend selection
         if let Some(popup_idx) = self.active_window_mut().mouse_state.selecting_in_popup {
             // Find the popup area from cached layout
-            if let Some((_, _, inner_rect, scroll_offset, _, _, _)) = self.active_chrome()
+            if let Some((_, _, inner_rect, scroll_offset, _, _, _)) = self
+                .active_chrome()
                 .popup_areas
                 .iter()
                 .find(|(idx, _, _, _, _, _, _)| *idx == popup_idx)
@@ -2445,7 +2448,8 @@ impl Editor {
             .dragging_popup_scrollbar
         {
             // Find the popup's scrollbar rect from cached layout
-            if let Some((_, _, inner_rect, _, _, Some(sb_rect), total_lines)) = self.active_chrome()
+            if let Some((_, _, inner_rect, _, _, Some(sb_rect), total_lines)) = self
+                .active_chrome()
                 .popup_areas
                 .iter()
                 .find(|(idx, _, _, _, _, _, _)| *idx == popup_idx)

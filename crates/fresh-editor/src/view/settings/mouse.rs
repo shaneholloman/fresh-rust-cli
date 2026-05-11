@@ -146,7 +146,8 @@ impl Editor {
         // Track hover position and compute hover hit for visual feedback
         match mouse_event.kind {
             MouseEventKind::Moved => {
-                let hover_hit = self.active_chrome()
+                let hover_hit = self
+                    .active_chrome()
                     .settings_layout
                     .as_ref()
                     .and_then(|layout: &SettingsLayout| layout.hit_test(col, row));
@@ -224,7 +225,8 @@ impl Editor {
         }
 
         // Use cached settings layout for hit testing
-        let Some(hit) = self.active_chrome()
+        let Some(hit) = self
+            .active_chrome()
             .settings_layout
             .as_ref()
             .and_then(|layout: &SettingsLayout| layout.hit_test(col, row))
@@ -524,7 +526,8 @@ impl Editor {
     }
 
     fn settings_scrollbar_click(&mut self, row: u16) {
-        if let Some(ref scrollbar_area) = self.active_chrome()
+        if let Some(ref scrollbar_area) = self
+            .active_chrome()
             .settings_layout
             .as_ref()
             .and_then(|l| l.scrollbar_area)
@@ -540,7 +543,8 @@ impl Editor {
     }
 
     fn settings_scrollbar_drag(&mut self, col: u16, row: u16) -> bool {
-        if let Some(ref scrollbar_area) = self.active_chrome()
+        if let Some(ref scrollbar_area) = self
+            .active_chrome()
             .settings_layout
             .as_ref()
             .and_then(|l| l.scrollbar_area)
@@ -559,7 +563,8 @@ impl Editor {
     }
 
     fn search_scrollbar_click(&mut self, row: u16) {
-        if let Some(ref scrollbar_area) = self.active_chrome()
+        if let Some(ref scrollbar_area) = self
+            .active_chrome()
             .settings_layout
             .as_ref()
             .and_then(|l| l.search_scrollbar_area)
@@ -575,7 +580,8 @@ impl Editor {
     }
 
     fn search_scrollbar_drag(&mut self, col: u16, row: u16) -> Option<bool> {
-        if let Some(ref scrollbar_area) = self.active_chrome()
+        if let Some(ref scrollbar_area) = self
+            .active_chrome()
             .settings_layout
             .as_ref()
             .and_then(|l| l.search_scrollbar_area)
@@ -834,7 +840,8 @@ impl Editor {
 
     /// Returns which confirm dialog button (0-2) is at the given position, if any
     fn get_confirm_dialog_button_at(&self, col: u16, row: u16) -> Option<usize> {
-        let modal_area = self.active_chrome()
+        let modal_area = self
+            .active_chrome()
             .settings_layout
             .as_ref()
             .map(|l| l.modal_area)?;

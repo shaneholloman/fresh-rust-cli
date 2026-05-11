@@ -1082,8 +1082,10 @@ impl Editor {
             self.active_chrome_mut().status_bar_warning_area = status_bar_layout.warning_badge;
             self.active_chrome_mut().status_bar_line_ending_area =
                 status_bar_layout.line_ending_indicator;
-            self.active_chrome_mut().status_bar_encoding_area = status_bar_layout.encoding_indicator;
-            self.active_chrome_mut().status_bar_language_area = status_bar_layout.language_indicator;
+            self.active_chrome_mut().status_bar_encoding_area =
+                status_bar_layout.encoding_indicator;
+            self.active_chrome_mut().status_bar_language_area =
+                status_bar_layout.language_indicator;
             self.active_chrome_mut().status_bar_message_area = status_bar_layout.message_area;
             self.active_chrome_mut().status_bar_remote_area = status_bar_layout.remote_indicator;
         }
@@ -1704,14 +1706,16 @@ impl Editor {
                 && y < rect.y.saturating_add(rect.height)
         };
 
-        if self.active_chrome()
+        if self
+            .active_chrome()
             .popup_areas
             .iter()
             .any(|entry| inside(entry.1))
         {
             return true;
         }
-        if self.active_chrome()
+        if self
+            .active_chrome()
             .global_popup_areas
             .iter()
             .any(|entry| inside(entry.1))

@@ -617,7 +617,6 @@ pub struct Editor {
     // moved onto `Window`.
     // `chrome_layout` moved onto `Window` — each window has its own
     // status bar, menu, prompt overlay, and popups.
-
     /// Command registry for dynamic commands
     command_registry: Arc<RwLock<CommandRegistry>>,
 

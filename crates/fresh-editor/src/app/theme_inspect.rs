@@ -169,7 +169,12 @@ impl Editor {
         }
 
         // Menu bar
-        if let Some(bar_area) = self.active_chrome().menu_layout.as_ref().map(|m| m.bar_area) {
+        if let Some(bar_area) = self
+            .active_chrome()
+            .menu_layout
+            .as_ref()
+            .map(|m| m.bar_area)
+        {
             let info = CellThemeInfo {
                 fg_key: Some("ui.menu_fg"),
                 bg_key: Some("ui.menu_bg"),

@@ -1599,6 +1599,9 @@ impl Editor {
             Action::FindSelectionPrevious => {
                 self.find_selection_previous();
             }
+            Action::ClearSearch => {
+                self.active_window_mut().clear_search_highlights();
+            }
             Action::AddCursorNextMatch => self.add_cursor_at_next_match(),
             Action::AddCursorAbove => self.add_cursor_above(),
             Action::AddCursorBelow => self.add_cursor_below(),

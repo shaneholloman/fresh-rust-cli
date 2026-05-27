@@ -710,6 +710,7 @@ pub enum Action {
     FindPrevious,
     FindSelectionNext,     // Quick find next occurrence of selection (Ctrl+F3)
     FindSelectionPrevious, // Quick find previous occurrence of selection (Ctrl+Shift+F3)
+    ClearSearch,           // Clear active search highlights (no-op if no search is active)
     Replace,
     QueryReplace, // Interactive replace (y/n/!/q for each match)
 
@@ -1168,6 +1169,7 @@ impl Action {
             "find_previous" => FindPrevious,
             "find_selection_next" => FindSelectionNext,
             "find_selection_previous" => FindSelectionPrevious,
+            "clear_search" => ClearSearch,
             "replace" => Replace,
             "query_replace" => QueryReplace,
 
@@ -2563,6 +2565,7 @@ impl KeybindingResolver {
             Action::FindPrevious => t!("action.find_previous"),
             Action::FindSelectionNext => t!("action.find_selection_next"),
             Action::FindSelectionPrevious => t!("action.find_selection_previous"),
+            Action::ClearSearch => t!("action.clear_search"),
             Action::Replace => t!("action.replace"),
             Action::QueryReplace => t!("action.query_replace"),
             Action::MenuActivate => t!("action.menu_activate"),

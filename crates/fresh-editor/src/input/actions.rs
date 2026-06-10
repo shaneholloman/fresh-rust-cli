@@ -2803,6 +2803,7 @@ pub fn action_to_events(
         | Action::TerminalEscape
         | Action::ToggleKeyboardCapture
         | Action::TerminalPaste
+        | Action::SendSelectionToTerminal
         | Action::OpenSettings
         | Action::CloseSettings
         | Action::SettingsSave

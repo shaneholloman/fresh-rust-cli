@@ -5164,6 +5164,7 @@ impl Window {
                 modified: state.buffer.is_modified(),
                 length: state.buffer.len(),
                 is_virtual,
+                editing_disabled: state.editing_disabled,
                 view_mode: view_mode.to_string(),
                 is_composing_in_any_split,
                 compose_width,
